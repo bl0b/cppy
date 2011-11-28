@@ -8,7 +8,9 @@ token_pattern = r"""
 (?P<number>-?(?:\.[0-9]+|(?:0|[1-9][0-9]*)(?:\.[0-9]*)?)(?:[eE]-?[0-9]+\.?[0-9]*)?)
 |(?P<keyword>\b(?:if|else|while|do|for|switch|class|struct|union|return)\b)
 |(?P<type_spec>\b(?:typename|template|const|static|register|volatile|extern|long|short|unsigned|signed)\b)
-|(?P<symbol>(?!(?P=type_spec))(?!(?P=keyword))\b[a-zA-Z_][a-zA-Z0-9_]*\b)
+|(?P<new>\bnew\b)
+|(?P<delete>\bdelete\b\s*([[][]])?)
+|(?P<symbol>(?!(?P=type_spec))(?!(?P=keyword))(?!(?P=new))(?!(?P=delete))\b[a-zA-Z_][a-zA-Z0-9_]*\b)
 |(?P<access>(?:\.|->)[*]?)
 |(?P<ampersand>[&])
 |(?P<comma>[,])
@@ -36,6 +38,7 @@ token_pattern = r"""
 |(?P<addsubdiv>[%+/-])
 |(?P<star>[*])
 |(?P<dot>[.])
+|(?P<sharp>[#])
 |(?P<dollar>[$])
 """
 
@@ -61,27 +64,23 @@ tokenize = lambda t: list(tokenize_iter(t))
 
 arity = { (0, 1): '?', (0, 2**31):'*', (1, 2**31):'+', (1, 1): '' }
 
-class SymbolExpr(str):
-    def __init__(self, s, amin=1, amax=1):
+
+
+class TokenExpr(str):
+    def __init__(self, s, amin=1, amax=1, publish=None):
         str.__init__(self, s)
         self.amin = amin
         self.amax = amax > 0 and amax or (2**31)
-    def match(self, l, i):
-        #print "at", i, "with", self, 'against', l[i]
+        self.publish = publish
+    def match(self, l, i, publisher=lambda name, tokens: None):
         i0 = i
-        #print i<len(l), (i-i0)<=self.amax, self==l[i][0]
         while i<len(l) and (i-i0)<self.amax and self==l[i][0]:
             i += 1
-            #if i<len(l):
-            #    print True, (i-i0)<self.amax, self==l[i][0]
-            #else:
-            #    print False, (i-i0)<self.amax, self==l[i][0]
         ok = self.amin <= (i-i0) <= self.amax
-        #if ok and (i-i0):
-        #   print "match", self, i-i0
+        ok and self.publish and publisher(self.publish, l[i0:i])
         return ok, i
     def copy(self):
-        return SymbolExpr(self, self.amin, self.amax)
+        return TokenExpr(self, self.amin, self.amax)
     def __str__(self):
         return str.__str__(self)+arity[self.amin, self.amax]
     def __repr__(self):
@@ -93,11 +92,13 @@ class SymbolExpr(str):
 class Expr(list):
     recursion_watchdog = [None]
     sep = ' '
-    def __init__(self, l, amin=1, amax=1):
+    next_is_published = False
+    def __init__(self, l, amin=1, amax=1, publish=None):
         list.__init__(self, l)
         self.amin = amin
         self.amax = amax > 0 and amax or (2**31)
-    def match(self, l, i):
+        self.publish = publish
+    def match(self, l, i, publisher=lambda name, tokens: None):
         #print "seq", str(self)
         #print Expr.recursion_watchdog
         if (self, i) in Expr.recursion_watchdog:
@@ -106,19 +107,26 @@ class Expr(list):
         Expr.recursion_watchdog.append((self, i))
         i0 = i
         count = 0
-        while i<len(l) and count < self.amax:
+        ok = True
+        groups = []
+        while ok and i<len(l) and count < self.amax:
             i1 = i
+            g = []
             for e in self:
-                 ok, i = e.match(l, i)
+                 ok, i = e.match(l, i, lambda n, t: g.append((n, t)))
                  if not ok:
-                     Expr.recursion_watchdog.pop()
-                     return self.amin <= count <= self.amax, i1
-                     #break
-            count += 1
+                     break
+            if ok:
+                count += 1
+                groups.append(g)
         Expr.recursion_watchdog.pop()
-        return self.amin <= count <= self.amax, i
+        ok = self.amin <= count <= self.amax
+        print ok, groups
+        ok and map(lambda gg: map(lambda grp: publisher(*grp), gg), groups)
+        ok and self.publish and publisher(self.publish, l[i0:i])
+        return ok, i
     def copy(self):
-        return type(self)(self, self.amin, self.amax)
+        return type(self)(self, self.amin, self.amax, self.publish)
     def __str__(self):
         a = arity[self.amin, self.amax]
         if a:
@@ -133,9 +141,9 @@ class Expr(list):
 class AltExpr(Expr):
     recursion_watchdog = [None]
     sep = ' | '
-    def __init__(self, l, amin=1, amax=1):
-        Expr.__init__(self, l, amin, amax)
-    def match(self, l, i):
+    #def __init__(self, l, amin=1, amax=1, publish=None):
+    #    Expr.__init__(self, l, amin, amax, publish)
+    def match(self, l, i, publisher=lambda name, tokens: None):
         #print AltExpr.recursion_watchdog
         #print "alt", str(self)
         if (self, i) in AltExpr.recursion_watchdog:
@@ -144,38 +152,48 @@ class AltExpr(Expr):
         AltExpr.recursion_watchdog.append((self, i))
         i0 = i
         count = 0
-        while i<len(l) and count < self.amax:
-            ok, i = max((e.match(l, i) for e in self), key=lambda (ok, i): ok and i or 0)
+        ok = True
+        tmp_groups = zip(self, ([] for x in self))
+        while ok and i<len(l) and count < self.amax:
+            (ok, i), g = max(((e.match(l, i, lambda n, t: g.append((n, t))), g) for e, g in tmp_groups), key=lambda ((ok, i), g): ok and i or 0)
             if not ok:
                  AltExpr.recursion_watchdog.pop()
-                 return self.amin <= count <= self.amax, i
+                 break
             count += 1
         AltExpr.recursion_watchdog.pop()
+        print tmp_groups
+        ok and g and map(lambda grp: publisher(*grp), g)
+        ok and self.publish and publisher(self.publisher, l[i0:i])
         return self.amin <= count <= self.amax, i
     def __repr__(self):
         a = arity[self.amin, self.amax]
         return 'A'+list.__repr__(self)+a
 
 
-class ProxyExpr(SymbolExpr):
-    def __init__(self, s, amin=1, amax=1):
-        SymbolExpr.__init__(self, s, amin, amax)
+class ProxyExpr(TokenExpr):
     def copy(self):
-        return ProxyExpr.__init__(self, s, amin, amax)
-    def match(self, l, i):
+        return ProxyExpr(self, s, amin, amax, self.publish)
+    def match(self, l, i, publisher=lambda name, tokens: None):
+        g = []
+        def pub(n, t):
+            g.append((n, t))
         e = named_expression[self].copy()
         e.amin = self.amin
         e.amax = self.amax
-        return e.match(l, i)
+        ok, end = e.match(l, i, pub)
+        ok and g and map(lambda grp: publisher(*grp), g)
+        ok and self.publish and publisher(self.publish, l[i:end])
+        return ok, end
     def __repr__(self):
-        return '@'+SymbolExpr.__repr__(self)
+        return '@'+TokenExpr.__repr__(self)
 
 class Anchor(object):
     def __init__(self, atstart):
         self.atstart = atstart
         self.amin = 1
         self.amax = 1
-    def match(self, l, i):
+        self.publish = None
+    def match(self, l, i, publisher=lambda name, tokens: None):
         #print "anchor", self.atstart and "start" or "end", i, len(l)
         return self.atstart and i==0 or i==len(l), i
     def copy(self):
@@ -225,6 +243,7 @@ def select_arity(e, op):
 def sub_compile_expr(tokens, i, inner=False):
     #print "in sub_compile_expr", tokens[i:], inner
     container = AltExpr([Expr([])])
+    next_publishes = None
     while i<len(tokens):
         t = tokens[i]
         if t[1]==')':
@@ -241,14 +260,27 @@ def sub_compile_expr(tokens, i, inner=False):
         elif t[1]=='(':
             i, expr = sub_compile_expr(tokens, i+1, True)
             container[-1].append(expr)
+        elif t[1]=='#':
+            i += 1
+            if tokens[i][0]=='symbol':
+                next_publishes = str(tokens[i][1])
+                i += 1
+            else:
+                raise TokenizerException('Expected symbol after sharp')
+            if tokens[i][0]!='colon':
+                raise TokenizerException('Expected colon after symbol')
+            i += 1
         elif t[1]=='^':
+            next_publishes = None
             container[-1].append(Anchor(True))
             i += 1
         elif t[1]=='$':
-            container[-1].append(Anchor(False))
+            next_publishes = None
+            container[-1].append(Anchor(None))
             i += 1
         elif t[1]=='|':
-            container.append(Expr([]))
+            container.append(Expr([], publish=next_publishes))
+            next_publishes = None
             i += 1
         elif t[0]=='symbol':
             #print "on sym", t[1]
@@ -256,9 +288,11 @@ def sub_compile_expr(tokens, i, inner=False):
             if named_expression.has_key(t[1]):
                 e = ProxyExpr(t[1])
             elif '<'+t[1]+'>' in token_pattern:
-                e = SymbolExpr(t[1])
+                e = TokenExpr(t[1])
             else:
                 raise TokenizerException('Unknown class '+str(t[1]))
+            e.publish=next_publishes
+            next_publishes = None
             if i<len(tokens):
                 op = tokens[i][1]
                 if op in '?+*':
@@ -281,6 +315,7 @@ def clean_expr(expr):
     #print "squeeze", repr(expr), "and", ret, "(from", repr(expr[0]), ")"
     ret.amin *= expr.amin
     ret.amax = max(expr.amax, ret.amax)
+    ret.publish = ret.publish or expr.publish
     return ret
 
 def compile_expr(expr, name=None):
@@ -298,24 +333,37 @@ def compile_expr(expr, name=None):
 
 def match(toks, expr):
     expr = named_expression.has_key(expr) and named_expression[expr].copy() or compile_expr(expr)
-    ok, end = expr.match(toks, 0)
-    return ok, not ok and -1 or 0, not ok and -1 or end
+    groups = []
+    def pub(name, toks):
+        groups.append((name, toks))
+    ok, end = expr.match(toks, 0, pub)
+    return ok, not ok and -1 or 0, not ok and -1 or end, ok and groups or None
 
 def find(toks, expr):
     expr = named_expression.has_key(expr) and named_expression[expr].copy() or compile_expr(expr)
+    groups = []
+    def pub(name, toks):
+        groups.append((name, toks))
     for i in xrange(len(toks)):
         ok, end = expr.match(toks, i)
         if ok:
-            return True, i, end
+            return True, i, end, ok and groups or None
     return False, -1, -1
 
 def find_all(toks, expr):
     ret = []
     expr = named_expression.has_key(expr) and named_expression[expr].copy() or compile_expr(expr)
-    for i in xrange(len(toks)):
-        ok, end = expr.match(toks, i)
+    i = 0
+    while i<len(toks):
+        groups = []
+        def pub(name, toks):
+            groups.append((name, toks))
+        ok, end = expr.match(toks, i, pub)
         if ok:
-            ret.append(i, end)
+            ret.append((i, groups))
+            i = end
+        else:
+            i += 1
     return ret
 
 compile_expr('', name='expr')
@@ -325,14 +373,14 @@ compile_expr('addsubdiv|star', name='arith')
 compile_expr('arith|boolop|comp|bitop|assign_set|assign_update', name='binop')
 compile_expr('open_square ((qualified_id comma)* qualified_id)? close_square', 'template_spec')
 compile_expr('type_spec* symbol template_spec?', name='simple_typename')
-compile_expr('simple_typename (namespace_member simple_typename)*', name='qualified_id')
+compile_expr('(simple_typename namespace_member)* simple_typename', name='qualified_id')
 compile_expr('open_paren qualified_id star* close_paren', name='typecast')
 compile_expr('star* typecast* qualified_id (access qualified_id)* (open_square expr close_square)*', name='lvalue')
 compile_expr('expr (comma expr)*', name='expr_list')
 compile_expr('star* qualified_id (assign_set expr)?', name='core_decl')
 compile_expr('qualified_id core_decl', name='param_decl')
 compile_expr('param_decl (comma param_decl)*', name='param_decl_list')
-compile_expr('lvalue open_paren param_decl_list close_paren', name='func_decl')
+compile_expr('qualified_id lvalue open_paren param_decl_list close_paren', name='func_decl')
 compile_expr('lvalue open_paren expr_list close_paren', name='func_call')
 compile_expr('^param_decl (comma core_decl)*', name='var_decl')
 compile_expr('number | string | char', name='immed')

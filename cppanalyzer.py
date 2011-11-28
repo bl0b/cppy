@@ -226,11 +226,11 @@ class Cpp(list):
                 return ret
         if Cpp.local_var_decl_re.match(statement.text):
             #print "DETECTED LOCAL VAR DECL"
-            ok, start, end = match(tokenize(statement.text), 'var_decl')
-            print ok and "SUCCESS" or "FAILED", statement.text
+            ok, start, end, groups = match(tokenize(statement.text), 'var_decl')
             if not ok:
-                print tokenize(statement.text)
-                #dump_expression('var_decl')
+                print ok and "SUCCESS" or "FAILED", statement.text
+            #    print tokenize(statement.text)
+            #    #dump_expression('var_decl')
 
             ret = LocalDeclStatement(statement.text)
             ret.sub = statement.sub
