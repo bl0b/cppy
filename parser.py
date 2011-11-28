@@ -5,16 +5,16 @@ from itertools import ifilter, imap, chain
 
 # Code adapted from an answer at stackoverflow.com http://stackoverflow.com/questions/2358890/python-lexical-analysis-and-tokenization
 token_pattern = r"""
-(?P<symbol>[a-zA-Z_][a-zA-Z0-9_]*)
-|(?P<number>-?(?:\.[0-9]+|(?:0|[1-9][0-9]*)(?:\.[0-9]*)?)(?:[eE]-?[0-9]+\.?[0-9]*)?)
+(?P<number>-?(?:\.[0-9]+|(?:0|[1-9][0-9]*)(?:\.[0-9]*)?)(?:[eE]-?[0-9]+\.?[0-9]*)?)
+|(?P<keyword>\b(?:if|else|while|do|for|switch|class|struct|union|return)\b)
 |(?P<type_spec>\b(?:typename|template|const|static|register|volatile|extern|long|short|unsigned|signed)\b)
+|(?P<symbol>(?!(?P=type_spec))(?!(?P=keyword))\b[a-zA-Z_][a-zA-Z0-9_]*\b)
 |(?P<access>(?:\.|->)[*]?)
 |(?P<ampersand>[&])
-|(?P<comma>,)
-|(?P<semicolon>;)
-|(?P<open_angle><)
-|(?P<close_angle>>)
-|(?P<keyword>\b(?:if|else|while|do|for|switch|class|struct|union)\b)
+|(?P<comma>[,])
+|(?P<semicolon>[;])
+|(?P<open_angle>[<])
+|(?P<close_angle>[>])
 |(?P<open_square>[[])
 |(?P<close_square>[]])
 |(?P<open_paren>[(])
@@ -35,7 +35,7 @@ token_pattern = r"""
 |(?P<comp>==|!=|<=|>=|[><](?!=))
 |(?P<addsubdiv>[%+/-])
 |(?P<star>[*])
-|(?P<dot>\.)
+|(?P<dot>[.])
 |(?P<dollar>[$])
 """
 
@@ -67,9 +67,15 @@ class SymbolExpr(str):
         self.amin = amin
         self.amax = amax > 0 and amax or (2**31)
     def match(self, l, i):
+        #print "at", i, "with", self, 'against', l[i]
         i0 = i
-        while i<len(l) and self==l[i][0] and (i-i0)<=self.amax:
+        #print i<len(l), (i-i0)<=self.amax, self==l[i][0]
+        while i<len(l) and (i-i0)<self.amax and self==l[i][0]:
             i += 1
+            #if i<len(l):
+            #    print True, (i-i0)<self.amax, self==l[i][0]
+            #else:
+            #    print False, (i-i0)<self.amax, self==l[i][0]
         ok = self.amin <= (i-i0) <= self.amax
         #if ok and (i-i0):
         #   print "match", self, i-i0
@@ -80,6 +86,8 @@ class SymbolExpr(str):
         return str.__str__(self)+arity[self.amin, self.amax]
     def __repr__(self):
         return str.__repr__(self)+arity[self.amin, self.amax]
+    def __eq__(self, s):
+        return str.__eq__(self, s)
 
 
 class Expr(list):
@@ -172,8 +180,36 @@ class Anchor(object):
         return self.atstart and i==0 or i==len(l), i
     def copy(self):
         return Anchor(self.atstart)
+    def __str__(self):
+        return self.atstart and '^' or '$'
 
 named_expression = {}
+
+in_dump = []
+
+
+def __dump_expr(name):
+    expr = named_expression[name]
+    if expr in in_dump:
+        return
+    print name, '=', str(expr)
+    in_dump.append(expr)
+    def deep_dump(expr):
+        if type(expr) is ProxyExpr:
+            dump_expression(expr)
+        if type(expr) not in (Expr, AltExpr):
+            return
+        for e in expr:
+            if type(e) is ProxyExpr:
+                __dump_expr(e)
+            if type(e) in (Expr, AltExpr):
+                deep_dump(e)
+    deep_dump(expr)
+
+def dump_expression(name):
+    global in_dump
+    in_dump = []
+    __dump_expr(name)
 
 def select_arity(e, op):
     if op == '?':
@@ -289,8 +325,9 @@ compile_expr('addsubdiv|star', name='arith')
 compile_expr('arith|boolop|comp|bitop|assign_set|assign_update', name='binop')
 compile_expr('open_square ((qualified_id comma)* qualified_id)? close_square', 'template_spec')
 compile_expr('type_spec* symbol template_spec?', name='simple_typename')
-compile_expr('(simple_typename namespace_member)* simple_typename', name='qualified_id')
-compile_expr('qualified_id (access qualified_id)* (open_square expr close_square)*', name='lvalue')
+compile_expr('simple_typename (namespace_member simple_typename)*', name='qualified_id')
+compile_expr('open_paren qualified_id star* close_paren', name='typecast')
+compile_expr('star* typecast* qualified_id (access qualified_id)* (open_square expr close_square)*', name='lvalue')
 compile_expr('expr (comma expr)*', name='expr_list')
 compile_expr('star* qualified_id (assign_set expr)?', name='core_decl')
 compile_expr('qualified_id core_decl', name='param_decl')

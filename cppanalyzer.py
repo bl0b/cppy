@@ -4,7 +4,7 @@ import re
 import sys, os
 from itertools import ifilter, imap, chain
 
-from parser import tokenize, match, find, find_all
+from parser import tokenize, match, find, find_all, named_expression, dump_expression
 
 # xreadlines with stripping of empty lines and single-line comments
 def cpp_strip_slc(f):
@@ -228,6 +228,9 @@ class Cpp(list):
             #print "DETECTED LOCAL VAR DECL"
             ok, start, end = match(tokenize(statement.text), 'var_decl')
             print ok and "SUCCESS" or "FAILED", statement.text
+            if not ok:
+                print tokenize(statement.text)
+                #dump_expression('var_decl')
 
             ret = LocalDeclStatement(statement.text)
             ret.sub = statement.sub
