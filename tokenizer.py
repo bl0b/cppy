@@ -1,20 +1,41 @@
-__all__ = [ "TokenizerException", "tokenize_iter", "tokenize", "token_pattern" ]
+__all__ = ["TokenizerException", "tokenize_iter", "tokenize", "token_pattern"]
 
 import re
 
 
 
-# Code adapted from an answer at stackoverflow.com http://stackoverflow.com/questions/2358890/python-lexical-analysis-and-tokenization
+# Code adapted from an answer at stackoverflow.com
+# (url split in 2 to please pep8)
+#http://stackoverflow.com/questions/2358890
+#/python-lexical-analysis-and-tokenization
+
+num = r"(?:\.[0-9]+|(?:0|[1-9][0-9]*)(?:\.[0-9]*)?)"
+expo = r"(?:[eE]-?[0-9]+\.?[0-9]*)?"
+number = num + expo
+
+keyword = [
+    'switch', 'class', 'while', 'do', 'for',
+    'if', 'else', 'struct', 'union', 'return',
+]
+
+type_spec = [
+    'typename', 'template', 'const', 'static', 'register', 'volatile',
+    'extern', 'long', 'short', 'unsigned', 'signed',
+]
+
+sym_assert = r"(?!(?P=type_spec))(?!(?P=keyword))(?!(?P=new))(?!(?P=delete))"
+
 token_pattern = r"""
-(?P<number>-?(?:\.[0-9]+|(?:0|[1-9][0-9]*)(?:\.[0-9]*)?)(?:[eE]-?[0-9]+\.?[0-9]*)?)
-|(?P<keyword>\b(?:if|else|while|do|for|switch|class|struct|union|return)\b)
-|(?P<type_spec>\b(?:typename|template|const|static|register|volatile|extern|long|short|unsigned|signed)\b)
+(?P<number>""" + number + r""")
+|(?P<keyword>\b(?:""" + '|'.join(keyword) + r""")\b)
+|(?P<type_spec>\b(?:""" + '|'.join(type_spec) + r""")\b)
 |(?P<new>\bnew\b)
 |(?P<delete>\bdelete\b\s*([[][]])?)
-|(?P<symbol>(?!(?P=type_spec))(?!(?P=keyword))(?!(?P=new))(?!(?P=delete))\b[a-zA-Z_][a-zA-Z0-9_]*\b)
+|(?P<symbol>""" + sym_assert + r"""\b[a-zA-Z_][a-zA-Z0-9_]*\b)
 |(?P<access>(?:\.|->)[*]?)
 |(?P<ampersand>[&])
 |(?P<comma>[,])
+|(?P<minus>[-])
 |(?P<semicolon>[;])
 |(?P<open_angle>[<])
 |(?P<close_angle>[>])
@@ -36,7 +57,7 @@ token_pattern = r"""
 |(?P<boolop>[|][|]|[&][&]|!)
 |(?P<bitop>(?<!\|)\|(?!\|) | (?<!\&)\&(?!\&) | [~] | (?<!\^)\^(?!\^))
 |(?P<comp>==|!=|<=|>=|[><](?!=))
-|(?P<addsubdiv>[%+/-])
+|(?P<addmoddiv>[%+/])
 |(?P<star>[*])
 |(?P<dot>[.])
 |(?P<sharp>[#])
@@ -45,22 +66,26 @@ token_pattern = r"""
 
 token_re = re.compile(token_pattern, re.VERBOSE)
 
-class TokenizerException(Exception): pass
+
+class TokenizerException(Exception):
+    pass
+
 
 def tokenize_iter(text):
     pos = 0
     while True:
         m = token_re.match(text, pos)
-        if not m: break
+        if not m:
+            break
         pos = m.end()
         tokname = m.lastgroup
         tokvalue = m.group(tokname)
         if tokname != 'whitespace':  # don't emit whitespace
             yield tokname, tokvalue
     if pos != len(text):
-        raise TokenizerException('tokenizer stopped at pos %r of %r in "%s" at "%s"' % (pos, len(text), text, text[pos:pos+3]))
+        msg = 'tokenizer stopped at pos %r of %r in "%s" at "%s"' % (
+                pos, len(text), text, text[pos:pos + 3])
+        raise TokenizerException(msg)
 # End of adapted code
 
 tokenize = lambda t: list(tokenize_iter(t))
-
-
