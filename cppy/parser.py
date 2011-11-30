@@ -126,7 +126,11 @@ class AltExpr(Expr):
         count = 0
         ok = True
         tmp_groups = zip(self, ([] for x in self))
-        g = []
+        groups = []
+
+        def subpub(n, e):
+            groups.append((n, e))
+
         while ok and i < len(l) and count < self.amax:
 
             def mk_match(e, g):
@@ -142,17 +146,22 @@ class AltExpr(Expr):
             def match_key((ok, i, g)):
                 return ok and i or 0
             make_pep8_happy = {'key': match_key}
-            #tmp_submatches = list(starmap(mk_match, tmp_groups))
-            #print tmp_submatches
+            tmp_submatches = list(starmap(mk_match, tmp_groups))
+            print tmp_submatches
             ok, i, g = max(starmap(mk_match, tmp_groups), key=match_key)
+            print ok, i, g, groups
+            print "tmp_groups", tmp_groups
             if not ok:
                 break
+            ok and g and map(lambda grp: subpub(*grp), g)
+            ok and self.publish and subpub(self.publish, l[i0:i])
+            print "groups", groups
             count += 1
         #AltExpr.recursion_watchdog.pop()
         #print tmp_groups
         ok = ok and i != i0
-        ok and g and map(lambda grp: publisher(*grp), g)
-        ok and self.publish and publisher(self.publisher, l[i0:i])
+        ok and groups and list(starmap(publisher, groups))
+        print "groups", groups
         return self.amin <= count <= self.amax, i
 
     def __repr__(self):
@@ -249,8 +258,8 @@ def select_arity(e, op):
 
 def sub_compile_expr(tokens, i, inner=False):
     #print "in sub_compile_expr", tokens[i:], inner
-    container = AltExpr([Expr([])])
-    next_publishes = None
+    global next_publishes
+    container = AltExpr([Expr([])], publish=next_publishes)
     while i < len(tokens):
         t = tokens[i]
         if t[1] == ')':
@@ -329,6 +338,8 @@ def clean_expr(expr):
 def compile_expression(expr,
                    name=None):
     "Compile an expression."
+    global next_publishes
+    next_publishes = None
     tokens = list(tokenize(expr))
     i, expr = sub_compile_expr(tokens, 0)
     if i != len(tokens):
