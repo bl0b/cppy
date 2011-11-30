@@ -1,4 +1,7 @@
-__all__ = ["compile_expression", "match", "find_all", "find", "expressions"]
+__all__ = [
+"compile_expression", "match", "find_all", "find", "expressions",
+"dump_expression"]
+
 import re
 from itertools import ifilter, imap, chain, starmap, izip_longest
 
@@ -10,14 +13,41 @@ arity = {(0, 1): '?', (0, ARITY_N): '*', (1, ARITY_N): '+', (1, 1): ''}
 
 
 def str_pub(e):
-    return e.publish and '#%s:' % e.publish or ''
+    return e.publish and '%s: ' % e.publish or ''
+
+
+def make_tuple(x):
+    if type(x) is list:
+        return tuple(x)
+    elif hasattr(x, '__iter__'):
+        return tuple(imap(make_tuple, x))
+    else:
+        return x
+
+
+def make_publisher(uniq=False):
+    if uniq:
+        groups = set()
+
+        def _pub(n, e):
+            groups.add((n, make_tuple(e)))
+    else:
+        groups = []
+
+        def _pub(n, e):
+            groups.append((n, make_tuple(e)))
+    return _pub, groups
 
 
 class TokenExpr(str):
     "Simply match against the current token type."
 
+    def __new__(self, s, amin=1, amax=1, publish=None):
+        """courtesy of http://
+bytes.com/topic/python/answers/32098-my-experiences-subclassing-string"""
+        return str.__new__(self, s)
+
     def __init__(self, s, amin=1, amax=1, publish=None):
-        str.__init__(self, s)
         self.amin = amin
         self.amax = amax > 0 and amax or (ARITY_N)
         self.publish = publish
@@ -28,6 +58,7 @@ class TokenExpr(str):
             i += 1
         ok = self.amin <= (i - i0) <= self.amax
         ok and self.publish and publisher(self.publish, l[i0:i])
+        print "matched", (i - i0), self
         return ok, i
 
     def copy(self):
@@ -48,9 +79,9 @@ class TokenExpr(str):
 
 class Expr(list):
     "Match a list of sequential sub-expressions"
-    recursion_watchdog = [None]
     sep = ' '
     next_is_published = False
+    recursion_watchdog = []
 
     def __init__(self, l, amin=1, amax=1, publish=None):
         list.__init__(self, l)
@@ -59,31 +90,31 @@ class Expr(list):
         self.publish = publish
 
     def match(self, l, i, publisher=lambda name, tokens: None):
-        #if (self, i) in Expr.recursion_watchdog:
-        #    return False, i
-        #Expr.recursion_watchdog.append((self, i))
+        if (self, i) in self.recursion_watchdog:
+            print (self, i), self.recursion_watchdog
+            return False, i
         i0 = i
         count = 0
         ok = True
-        groups = []
+        pub, groups = make_publisher()
+        self.recursion_watchdog.append((self, int(i)))
         while ok and i < len(l) and count < self.amax:
             i1 = i
-            g = []
+            subpub, subgrps = make_publisher()
             for e in self:
-                ok, i = e.match(l, i, lambda n, t: g.append((n, t)))
+                ok, i = e.match(l, i, subpub)
                 if not ok:
                     break
             if ok:
                 count += 1
-                groups.append(g)
+                list(starmap(pub, subgrps))
+        self.recursion_watchdog.pop()
         if ok:
             i1 = i
-        ok = ok and i1 != i0
-        #Expr.recursion_watchdog.pop()
         ok = self.amin <= count <= self.amax
-        #print ok, groups
-        ok and map(lambda gg: map(lambda grp: publisher(*grp), gg), groups)
+        ok and groups and list(starmap(publisher, groups))
         ok and self.publish and publisher(self.publish, l[i0:i1])
+        print "list matched", count, self
         return ok, i1
 
     def copy(self):
@@ -98,13 +129,14 @@ class Expr(list):
 
     def __repr__(self):
         a = arity[self.amin, self.amax]
-        return str_pub(self) + list.__repr__(self) + a
+        return 'Seq(' + str_pub(self) + list.__repr__(self) + a + ')'
 
     def __eq__(self, e):
-        return reduce(lambda a, b: a and b[0] == b[1],
-                      izip_longest(self, e), True) \
-                and self.amin == e.amin \
-                and self.amax == e.amax
+        return type(self) == type(e) \
+               and reduce(lambda a, b: a and b[0] == b[1],
+                          izip_longest(self, e), True) \
+               and self.amin == e.amin \
+               and self.amax == e.amax
 
 
 class AltExpr(Expr):
@@ -112,84 +144,77 @@ class AltExpr(Expr):
     Only the first longest match is retained."""
     recursion_watchdog = []
     sep = ' | '
-    #def __init__(self, l, amin=1, amax=1, publish=None):
-    #    Expr.__init__(self, l, amin, amax, publish)
+
+    @classmethod
+    def matcher(cls, l, i):
+
+        def mk_match(e, (spub, sgrp)):
+            if (e, i) in cls.recursion_watchdog:
+                return False, i, sgrp
+            cls.recursion_watchdog.append((e, int(i)))
+            ok, iprime = e.match(l, i, spub)
+            cls.recursion_watchdog.pop()
+            return ok, iprime, sgrp
+        return mk_match
 
     def match(self, l, i, publisher=lambda name, tokens: None):
-        #print AltExpr.recursion_watchdog
-        #print "alt", str(self)
-        #if (self, i) in AltExpr.recursion_watchdog:
-        #    #raise TokenizerException("Endless recursion detected !")
-        #    return False, i
-        #AltExpr.recursion_watchdog.append((self, i))
         i0 = i
         count = 0
         ok = True
-        tmp_groups = zip(self, ([] for x in self))
-        groups = []
-
-        def subpub(n, e):
-            groups.append((n, e))
-
+        tmp_groups = zip(self, (make_publisher() for x in self))
+        subpub, groups = make_publisher()
         while ok and i < len(l) and count < self.amax:
-
-            def mk_match(e, g):
-                if (e, i) in AltExpr.recursion_watchdog:
-                    return False, i, g
-                #print "entering", (e, i)
-                AltExpr.recursion_watchdog.append((e, int(i)))
-                ok, iprime = e.match(l, i, lambda n, t: g.append((n, t)))
-                AltExpr.recursion_watchdog.pop()
-                #print "exiting", (e, i)
-                return ok, iprime, g
-
-            def match_key((ok, i, g)):
-                return ok and i or 0
-            make_pep8_happy = {'key': match_key}
-            tmp_submatches = list(starmap(mk_match, tmp_groups))
-            print tmp_submatches
-            ok, i, g = max(starmap(mk_match, tmp_groups), key=match_key)
-            print ok, i, g, groups
-            print "tmp_groups", tmp_groups
+            matcher = self.matcher(l, i)
+            ok, i, g = max(starmap(matcher, tmp_groups),
+                           key=lambda (ok, i, g): ok and i or 0)
             if not ok:
                 break
-            ok and g and map(lambda grp: subpub(*grp), g)
+            ok and g and list(starmap(subpub, g))
             ok and self.publish and subpub(self.publish, l[i0:i])
-            print "groups", groups
             count += 1
-        #AltExpr.recursion_watchdog.pop()
-        #print tmp_groups
-        ok = ok and i != i0
+
+        ok = self.amin <= count <= self.amax
         ok and groups and list(starmap(publisher, groups))
-        print "groups", groups
-        return self.amin <= count <= self.amax, i
+        print "alt matched", ok, count, self
+        return ok, i
 
     def __repr__(self):
         a = arity[self.amin, self.amax]
-        return 'A' + str_pub(self) + list.__repr__(self) + a
+        return 'Alt(' + str_pub(self) + list.__repr__(self) + a + ')'
 
 
 class ProxyExpr(TokenExpr):
     "Match a named expression instead of a simple token."
 
+    def __new__(self, l, amin=1, amax=1, publish=None):
+        return TokenExpr.__new__(self, l, amin, amax, publish)
+
+    def __init__(self, l, amin=1, amax=1, publish=None):
+        TokenExpr.__init__(self, l, amin, amax, publish)
+        self.e = named_expression[self].copy()
+        self.e.amin = self.amin
+        self.e.amax = self.amax
+
     def copy(self):
         return ProxyExpr(self, s, amin, amax, self.publish)
 
     def match(self, l, i, publisher=lambda name, tokens: None):
-        g = []
-
-        def pub(n, t):
-            g.append((n, t))
-        e = named_expression[self].copy()
-        e.amin = self.amin
-        e.amax = self.amax
-        ok, end = e.match(l, i, pub)
+        pub, g = make_publisher()
+        ok, end = self.e.match(l, i, pub)
         ok and g and map(lambda grp: publisher(*grp), g)
         ok and self.publish and publisher(self.publish, l[i:end])
         return ok, end
 
+    def __eq__(self, e):
+        streq = str.__eq__(self, e)
+        if isinstance(e, ProxyExpr):
+            return streq and self.amin == e.amin and self.amax == e.amax
+        return streq
+
     def __repr__(self):
         return str_pub(self) + '@' + TokenExpr.__repr__(self)
+
+    __str__ = TokenExpr.__str__
 
 
 class Anchor(object):
@@ -210,6 +235,9 @@ class Anchor(object):
 
     def __str__(self):
         return self.atstart and '^' or '$'
+
+    def __eq__(self, e):
+        return type(e) is Anchor and self.atstart == e.atstart
 
 
 named_expression = {}
@@ -260,6 +288,7 @@ def sub_compile_expr(tokens, i, inner=False):
     #print "in sub_compile_expr", tokens[i:], inner
     global next_publishes
     container = AltExpr([Expr([])], publish=next_publishes)
+    next_publishes = None
     while i < len(tokens):
         t = tokens[i]
         if t[1] == ')':
@@ -363,28 +392,29 @@ def match(toks, expr):
     """Match an expression against a list of tokens (match from start only).
     Returns found:bool, start=0, end:int, groups:list or None
     """
+    Expr.recursion_watchdog = []
+    AltExpr.recursion_watchdog = []
     expr = mk_expr(expr)
-    groups = []
-
-    def pub(name, toks):
-        groups.append((name, toks))
+    pub, groups = make_publisher()
     ok, end = expr.match(toks, 0, pub)
-    return ok, not ok and -1 or 0, not ok and -1 or end, ok and groups or None
+    if ok:
+        return True, 0, end, sorted(groups)
+    else:
+        return False, -1, -1, None
 
 
 def find(toks, expr):
     """Match an expression against a list of tokens (match anywhere).
     Returns found:bool, start=0, end:int, groups:list or None
     """
+    Expr.recursion_watchdog = []
+    AltExpr.recursion_watchdog = []
     expr = mk_expr(expr)
-    groups = []
-
-    def pub(name, toks):
-        groups.append((name, toks))
     for i in xrange(len(toks)):
-        ok, end = expr.match(toks, i)
+        pub, groups = make_publisher()
+        ok, end = expr.match(toks, i, pub)
         if ok:
-            return True, i, end, ok and groups or None
+            return True, i, end, ok and sorted(groups) or None
     return False, -1, -1
 
 
@@ -396,13 +426,12 @@ def find_all(toks, expr):
     expr = mk_expr(expr)
     i = 0
     while i < len(toks):
-        groups = []
-
-        def pub(name, toks):
-            groups.append((name, toks))
+        Expr.recursion_watchdog = []
+        AltExpr.recursion_watchdog = []
+        pub, groups = make_publisher()
         ok, end = expr.match(toks, i, pub)
         if ok:
-            ret.append((i, groups))
+            ret.append((i, sorted(groups)))
             i = end
         else:
             i += 1

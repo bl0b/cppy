@@ -116,5 +116,5 @@ for n in expressions:
 # Now that they all exist in the dictionary, do the actual work
 
 for n, e in expressions.iteritems():
-    print "compiling", n, ":", ' '.join(map(str.strip, str(e).splitlines()))
+    #print "compiling", n, ":", ' '.join(map(str.strip, str(e).splitlines()))
     compile_expression(e, name=n)

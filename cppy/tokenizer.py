@@ -27,6 +27,16 @@ sym_assert = r"(?!(?P=type_spec))(?!(?P=keyword))(?!(?P=new))(?!(?P=delete))"
 
 token_pattern = r"""
 (?P<number>""" + number + r""")
+|(?P<kw_switch>\bswitch\b)
+|(?P<kw_class>\bclass\b)
+|(?P<kw_while>\bwhile\b)
+|(?P<kw_do>\bdo\b)
+|(?P<kw_for>\bfor\b)
+|(?P<kw_if>\bif\b)
+|(?P<kw_else>\belse\b)
+|(?P<kw_struct>\bstruct\b)
+|(?P<kw_union>\bunion\b)
+|(?P<kw_return>\breturn\b)
 |(?P<keyword>\b(?:""" + '|'.join(keyword) + r""")\b)
 |(?P<type_spec>\b(?:""" + '|'.join(type_spec) + r""")\b)
 |(?P<new>\bnew\b)

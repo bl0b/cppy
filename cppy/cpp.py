@@ -1,16 +1,47 @@
-#!/usr/bin/env python
+__all__ = ['Cpp']
 
 import re
 import sys
-import os
-from itertools import ifilter, imap, chain
-
-from parser import tokenize, match, find, find_all, named_expression
-from parser import dump_expression, compile_expression
+from itertools import ifilter, imap
 import expressions
-
-from cpp import cpp_read
+from parser import tokenize, match, find, find_all, compile_expression
 from statements import *
+
+
+def cpp_strip_slc(f):
+    # xreadlines with stripping of empty lines and single-line comments
+    reader = hasattr(f, 'xreadlines') and f.xreadlines() \
+             or hasattr(f, 'splitlines') and f.splitlines() \
+             or f
+    for line in reader:
+        components = line.strip().split('//')
+        if len(components) and len(components[0]) and components[0][0] != '#':
+            yield components[0]
+
+
+multiline_comment = re.compile(r'/[*].*?[*]/')
+
+
+def cpp_strip_mlc(f):
+    big_buffer = ' '.join(cpp_strip_slc(f))
+    return ' '.join(multiline_comment.split(big_buffer))
+
+
+reformat = {
+        '{': '\n{\n',
+        '}': '\n}\n',
+        ';': ';\n',
+        r'\ ': ' ',
+}
+
+
+def cpp_read(f):
+    nocomment = cpp_strip_mlc(f)
+    for match, replace in reformat.iteritems():
+        nocomment = replace.join(ifilter(lambda x: x, nocomment.split(match)))
+    lines = imap(str.strip, nocomment.splitlines())
+    return filter(lambda s: s not in ('', ','), lines)
+
 
 class Cpp(list):
     keywords = {
@@ -53,9 +84,19 @@ class Cpp(list):
             ret = CppStatement('<DATA>')
             start -= 1
         else:
-            firstword = lines[start].split(' ')[0]
-            if firstword in Cpp.keywords:
-                ret = Cpp.keywords[firstword](lines[start])
+            kw = None
+            for w in Cpp.keywords:
+                if lines[start].startswith(w):
+                    if len(lines[start]) > len(w):
+                        c = lines[start][len(w)]
+                        if len(c) == 0 or c != '_' and not c.isalnum():
+                            kw = w
+                            break
+            #firstword = lines[start].split(' ')[0]
+            #if firstword in Cpp.keywords:
+            if kw:
+                #ret = Cpp.keywords[firstword](lines[start])
+                ret = Cpp.keywords[kw](lines[start])
             else:
                 ret = CppStatement(lines[start])
         if (start + 1) < len(lines) and lines[start + 1] == '{':
@@ -72,17 +113,41 @@ class Cpp(list):
                     ret.sub[-1].text += statement.text
                     IN_FOR -= 1
                     ret.sub[-1].sub.extend(statement.sub)
+        # TESTING !
+        #print >> sys.stderr, "EXPERIMENTAL RECOGNITION", \
+        #                     ret.text, CppMeta.recognize(ret.text)
+        # END TESTING !
         if context_in_for == 0:
-            return Cpp.postprocess(ret, context), start + 1
+            return Cpp.test_recog(Cpp.postprocess(ret, context)), start + 1
         else:
             return ret, start + 1
 
     @staticmethod
+    def incr(name, ok):
+        global counter
+        ok = ok and 1 or 0
+        if name in counter:
+            counter[name] = (counter[name][0] + ok, counter[name][1] + 1)
+        else:
+            counter[name] = (ok, 1)
+
+    @staticmethod
+    def test_recog(ret):
+        global counter
+        recog = CppMeta.recognize(ret.text)
+        name = type(ret).__name__
+        Cpp.incr(name, recog[0])
+        grpname = recog[0] and recog[3][0][0] or None
+        if name != 'CppStatement' and grpname != name:
+            print "Experimental recognition discrepancy:"
+            print "     ", type(ret).__name__, ret.text
+            print "     ", grpname, recog
+            print "--------------------------------------"
+        print counter
+        return ret
+
+    @staticmethod
     def postprocess(statement, context):
-        # TESTING !
-        print >> sys.stderr, "EXPERIMENTAL RECOGNITION", \
-                             CppMeta.recognize(statement.text)
-        # END TESTING !
         c_type = len(context) and type(context[-1]) or None
         if type(statement) is ElseStatement and c_type is IfStatement:
             ret = context.pop()
@@ -162,21 +227,5 @@ class Cpp(list):
             for x in gen:
                 yield x
 
-
-if __name__ == '__main__':
-    #
-    #cpp = Cpp(open(sys.argv[1]))
-    cpp = Cpp(open('calcul/BJS_RHE.cc'))
-    #print cpp
-    #f = cpp[-1]
-    #t = []
-    #f.tree(0, t)
-    #print t
-    #def test_pred(x):
-    #    return type(x) is CppStatement and x.text!='<DATA>'
-    #for x in cpp.search_iter(test_pred):
-    #    print x
-
-    #test = "list(f.search_iter(lambda x: type(x) is AssignmentStatement))"
-    #print test
-    #eval(test)
+#DELETEME!
+counter = {}

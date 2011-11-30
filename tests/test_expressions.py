@@ -17,12 +17,23 @@ def find_all(t, e):
 class Test_Expressions(TestCase):
 
     def expect(self, f, t, e, expected):
-        self.assertEqual(f(t, e), expected, msg="Matching '%s' against %s" %
-                         (t, str(e)))
+        print "=========================="
+        print f.__name__
+        print str(t)
+        print repr(cppy.compile_expression(e))
+        print "-------------"
+        result = f(t, e)
+        self.messages.append("%s(%s, %s)" % (
+            str(f.__name__), repr(t), repr(e)))
+        self.expectations.append(expected)
+        self.results.append(result)
 
     def test_grouping(self):
-        xfoo = [('x', [('symbol', 'foo')])]
-        xnewfoo = [('x', [('new', 'new'), ('symbol', 'foo')])]
+        self.expectations = []
+        self.messages = []
+        self.results = []
+        xfoo = [('x', (('symbol', 'foo'),))]
+        xnewfoo = [('x', (('new', 'new'), ('symbol', 'foo')))]
         exp = (
             (match, 'foo', '#x:symbol',
                 (True, 0, 1, xfoo)),
@@ -40,6 +51,12 @@ class Test_Expressions(TestCase):
 
         for e in exp:
             self.expect(*e)
+
+        self.maxDiff = None
+        print dir(self)
+        self.assertSequenceEqual(
+                zip(self.messages, self.results),
+                zip(self.messages, self.expectations))
 
     def runTest(self):
         test_grouping(self)
