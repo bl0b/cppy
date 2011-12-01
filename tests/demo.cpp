@@ -151,8 +151,7 @@ public:
 
     bus_stop_destination(){}
     bus_stop_destination(
-        const gps_position & _lat, const gps_position & _long, const std::string
- & _name
+        const gps_position & _lat, const gps_position & _long, const std::string & _name
     ) :
         bus_stop(_lat, _long), name(_name)
     {
@@ -180,11 +179,9 @@ class bus_route
     template<class Archive>
     void serialize(Archive &ar, const unsigned int version)
     {
-        // in this program, these classes are never serialized directly but rath
-er
+        // in this program, these classes are never serialized directly but rather
         // through a pointer to the base class bus_stop. So we need a way to be
-        // sure that the archive contains information about these derived classe
-s.
+        // sure that the archive contains information about these derived classes.
         //ar.template register_type<bus_stop_corner>();
         ar.register_type(static_cast<bus_stop_corner *>(NULL));
         //ar.template register_type<bus_stop_destination>();
@@ -255,8 +252,7 @@ public:
 private:
     friend class boost::serialization::access;
     friend std::ostream & operator<<(std::ostream &os, const bus_schedule &bs);
-    friend std::ostream & operator<<(std::ostream &os, const bus_schedule::trip_
-info &ti);
+    friend std::ostream & operator<<(std::ostream &os, const bus_schedule::trip_info &ti);
     std::list<std::pair<trip_info, bus_route *> > schedule;
     template<class Archive>
     void serialize(Archive &ar, const unsigned int version)
@@ -266,8 +262,7 @@ info &ti);
 public:
     void append(const std::string &_d, int _h, int _m, bus_route *_br)
     {
-        schedule.insert(schedule.end(), std::make_pair(trip_info(_h, _m, _d), _b
-r));
+        schedule.insert(schedule.end(), std::make_pair(trip_info(_h, _m, _d), _br));
     }
     bus_schedule(){}
 };
@@ -279,8 +274,7 @@ std::ostream & operator<<(std::ostream &os, const bus_schedule::trip_info &ti)
 }
 std::ostream & operator<<(std::ostream &os, const bus_schedule &bs)
 {
-    std::list<std::pair<bus_schedule::trip_info, bus_route *> >::const_iterator
-it;
+    std::list<std::pair<bus_schedule::trip_info, bus_route *> >::const_iterator it;
     for(it = bs.schedule.begin(); it != bs.schedule.end(); it++){
         os << it->first << *(it->second);
     }
