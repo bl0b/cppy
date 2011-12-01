@@ -25,7 +25,7 @@ class CppMeta(type):
     def __recog(cls, tokens):
         m = lambda v: match(tokens, v)
         #print cls.recognizers
-        tmp = [g[0] for ok, start, end, g
+        tmp = [(g[0][0], g) for ok, start, end, g
                      in imap(m, cls.recognizers.itervalues())
                      if ok and g]
         #print "=>", tmp
@@ -37,16 +37,32 @@ class CppMeta(type):
         ok, start, end, groups = match(tokens, 'c_label|(scope colon)')
         if ok:
             tokens = tokens[end:]
-        ret = {}
-        while tokens and not ret:
-            ret = cls.__recog(tokens)
-            if not ret:
-                # try to remove leading macros...
-                ok, start, end, groups = match(tokens, 'macro')
-                if ok:
-                    tokens = tokens[end:]
-                else:
-                    break
+        #ret = {}
+        #while tokens and not ret:
+        #    ret = cls.__recog(tokens)
+        #    if not ret:
+        #        # try to remove leading macros...
+        #        ok, start, end, groups = match(tokens, 'macro')
+        #        if ok:
+        #            tokens = tokens[end:]
+        #        else:
+        #            break
+        ret = cls.__recog(tokens)
+        if ret and len(ret) > 1:
+            # try and disambiguate stuff
+            # first, a derived class has priority over the base class.
+            clsbyname = lambda n: getattr(sys.modules[__name__], n)
+            classes = map(clsbyname, ret.iterkeys())
+            #print "BEFORE disambiguation by derivation", classes
+
+            def test_class(c):
+                others = tuple(cl for cl in classes if cl is not c)
+                return issubclass(c, others)
+            classes = filter(test_class, classes)
+            #print "AFTER disambiguation by derivation", classes
+            if len(classes) == 1:
+                c = classes[0].__name__
+                return {c: ret[c]}
         return ret
 
 
@@ -66,7 +82,7 @@ class CppMeta(type):
 
 class CppStatement(object):
     __metaclass__ = CppMeta
-    recognize = 'expr semicolon'
+    recognize = 'semicolon semicolon'  # will never match :)
     tag = 'cpp'
     extra_contents = []
 
@@ -76,6 +92,9 @@ class CppStatement(object):
         self.sub = []
         for xc in self.extra_contents:
             setattr(self, xc, [])
+
+    def itemize(self):
+        return match(tokenize(self.text), self.recognize)
 
     def __str__(self):
         ret = self.tag + '(' + self.text
@@ -107,6 +126,11 @@ class CppStatement(object):
                 continue
             for x in statement.search_iter(predicate):
                 yield x
+
+
+class ExprStatement(CppStatement):
+    tag = 'expr'
+    recognize = 'expr semicolon'
 
 
 class IfStatement(CppStatement):
@@ -156,7 +180,7 @@ class DeleteStatement(CppStatement):
     recognize = '^kw_delete'
 
 
-class AssignmentStatement(CppStatement):
+class AssignmentStatement(ExprStatement):
     tag = 'assign'
     recognize = '^ assignment'
 

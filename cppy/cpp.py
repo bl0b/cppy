@@ -134,7 +134,7 @@ class Cpp(list):
 
     @staticmethod
     def test_recog(ret):
-        global counter
+        global counter, ambiguities
         recog = CppMeta.recognize(ret.text)
         name = type(ret).__name__
         Cpp.incr(name, recog)
@@ -151,9 +151,18 @@ class Cpp(list):
                 print "     ", recog
                 print "--------------------------------------"
             elif recog:  #grpname is not None:
-                print "Experimental recognition detected a",
-                print recog
+                #print "Experimental recognition detected a",
+                #print recog
                 #print grpname, ":", ret.text
+                pass
+        if len(recog) > 1:
+            ambiguities.add(tuple(recog.iterkeys()))
+            print "======================================================="
+            print "Ambiguity detected !"
+            print "Statement <", ret.text, "> is either one of :",
+            print ', '.join(recog.iterkeys())
+            print recog
+            print "--------------------------------------"
         #print counter, ret
         return ret
 
@@ -242,3 +251,4 @@ class Cpp(list):
 
 #DELETEME!
 counter = {}
+ambiguities = set()

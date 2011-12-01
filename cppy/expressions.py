@@ -2,6 +2,11 @@ from parser import compile_expression
 
 
 expressions = {
+'macro':
+    'symbol call?',
+
+# OPERATORS
+
 'arith':
     'addmoddiv|minus|star',
 
@@ -11,6 +16,8 @@ expressions = {
 
 'ref_deref':
     'ampersand|star',
+
+# IDENTIFIERS
 
 'id':
     '(container namespace_member)* symbol',
@@ -38,6 +45,8 @@ expressions = {
        template_inst?
        ref_deref*""",
 
+# TEMPLATES
+
 'template_param_spec':
     '(kw_template|kw_typename|kw_class|kw_struct|kw_union)? type_id',
 
@@ -55,8 +64,12 @@ expressions = {
        )?
        close_angle""",
 
+# TYPECASTING
+
 'typecast':
     'open_paren type_id close_paren',
+
+# LVALUES
 
 'anon_lvalue_access':
     'open_square expr close_square | call',
@@ -73,22 +86,27 @@ expressions = {
 'lvalue':
     'star* typecast* raw_lvalue',
 
+'func_call':
+    'lvalue call | type_id call',
+
+# DECLARATIONS
+
 'expr_list':
     'expr (comma expr)*',
 
 'core_decl':
     """ref_deref*
-       id?
+       id
        ( call
        | (open_square expr? close_square)?
          (assign_set #initialization:expr)?
        )""",
 
 'param_decl':
-    'type_id core_decl',
+    '#type:type_id #id:id (assign_set #initialization:expr)?',
 
 'param_decl_list':
-    'param_decl (comma param_decl)*',
+    '#param:param_decl (comma #param:param_decl)*',
 
 'constructor_decl':
     """(kw_template template_spec)?
@@ -104,23 +122,19 @@ expressions = {
     'type_spec? tilde symbol open_paren close_paren',
 
 'func_decl':
-    """(kw_template template_spec)?
-       type_id
-       id_or_operator
+    """#template_type:(kw_template template_spec)?
+       #type:type_id
+       #id:id_or_operator
        template_inst?
        open_paren
        param_decl_list?
        close_paren
        type_spec?""",  # final const if present
 
-'func_call':
-    'lvalue call | type_id call',
-
-'macro':
-    'symbol call?',
-
 'var_decl':
     'param_decl (comma core_decl)* semicolon',
+
+# EXPRESSIONS
 
 'immed':
     'minus number | number | string | char',
@@ -152,15 +166,7 @@ expressions = {
 'c_label':
     'symbol colon',
 
-#'expr':
-#    """immed
-#     | lvalue
-#     | expr (binop expr)+
-#     | incdec lvalue
-#     | lvalue incdec
-#     | func_call
-#     | open_paren expr close_paren
-#     | expr ternary expr colon expr""",
+# STATEMENTS
 
 'assignment':
     """#lvalue:lvalue

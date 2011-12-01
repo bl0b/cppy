@@ -25,7 +25,7 @@ type_spec = [
 
 scope = ['public', 'private', 'protected']
 
-sym_assert = ''.join('(?!(?P=%s))' % i for i in chain(keyword, ['type_spec']))
+sym_assert = ''.join('(?!(?P=%s))' % i for i in chain(keyword, ['type_spec', 'scope']))
 
 token_pattern = r"""
 (?P<number>""" + number + r""")
