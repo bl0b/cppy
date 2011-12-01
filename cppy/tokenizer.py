@@ -1,8 +1,7 @@
 __all__ = ["TokenizerException", "tokenize_iter", "tokenize", "token_pattern"]
 
 import re
-
-
+from itertools import chain
 
 # Code adapted from an answer at stackoverflow.com
 # (url split in 2 to please pep8)
@@ -10,20 +9,23 @@ import re
 #/python-lexical-analysis-and-tokenization
 
 num = r"(?:\.[0-9]+|(?:0|[1-9][0-9]*)(?:\.[0-9]*)?)"
-expo = r"(?:[eE]-?[0-9]+\.?[0-9]*)?"
+expo = r"(?:[eE]-?[0-9]+\.?[0-9]*)?[lLdf]?"
 number = num + expo
 
 keyword = [
-    'switch', 'class', 'while', 'do', 'for',
-    'if', 'else', 'struct', 'union', 'return',
+    'kw_switch', 'kw_class', 'kw_while', 'kw_do', 'kw_for',
+    'kw_if', 'kw_else', 'kw_struct', 'kw_union', 'kw_return',
+    'kw_new', 'kw_delete', 'kw_operator'
 ]
 
 type_spec = [
-    'typename', 'template', 'const', 'static', 'register', 'volatile',
-    'extern', 'long', 'short', 'unsigned', 'signed',
+    'typename', 'const', 'static', 'register', 'volatile',
+    'extern', 'long', 'short', 'unsigned', 'signed', 'friend',
 ]
 
-sym_assert = r"(?!(?P=type_spec))(?!(?P=keyword))(?!(?P=new))(?!(?P=delete))"
+scope = ['public', 'private', 'protected']
+
+sym_assert = ''.join('(?!(?P=%s))' % i for i in chain(keyword, ['type_spec']))
 
 token_pattern = r"""
 (?P<number>""" + number + r""")
@@ -37,18 +39,20 @@ token_pattern = r"""
 |(?P<kw_struct>\bstruct\b)
 |(?P<kw_union>\bunion\b)
 |(?P<kw_return>\breturn\b)
-|(?P<keyword>\b(?:""" + '|'.join(keyword) + r""")\b)
+|(?P<kw_template>\btemplate\b)
+|(?P<kw_operator>\boperator\b)
+|(?P<scope>\b(?:""" + '|'.join(scope) + r""")\b)
 |(?P<type_spec>\b(?:""" + '|'.join(type_spec) + r""")\b)
-|(?P<new>\bnew\b)
-|(?P<delete>\bdelete\b\s*([[][]])?)
+|(?P<kw_new>\bnew\b)
+|(?P<kw_delete>\bdelete\b)
 |(?P<symbol>""" + sym_assert + r"""\b[a-zA-Z_][a-zA-Z0-9_]*\b)
 |(?P<access>(?:\.|->)[*]?)
 |(?P<ampersand>[&])
 |(?P<comma>[,])
 |(?P<minus>[-])
 |(?P<semicolon>[;])
-|(?P<open_angle>[<])
-|(?P<close_angle>[>])
+|(?P<open_angle>(?<!<)[<](?!<))
+|(?P<close_angle>(?<!>)[>](?!>))
 |(?P<open_square>[[])
 |(?P<close_square>[]])
 |(?P<open_paren>[(])
@@ -61,12 +65,13 @@ token_pattern = r"""
 |(?P<whitespace>\s+)
 |(?P<assign_set>(?<!=)[=](?!=))
 |(?P<assign_update>(?:>>|<<|(?<![<>])[<>]|[&^%*/+-])[=](?!=))
+|(?P<shift>(>>|<<)(?!=))
 |(?P<incdec>[+][+]|--)
 |(?P<string>"(?:\\["bntr]|[^\\])*")
 |(?P<char>'(?:\\['bntr]|[^\\])')
 |(?P<boolop>[|][|]|[&][&]|!)
 |(?P<bitop>(?<!\|)\|(?!\|) | (?<!\&)\&(?!\&) | [~] | (?<!\^)\^(?!\^))
-|(?P<comp>==|!=|<=|>=|[><](?!=))
+|(?P<comp>==|!=|<=|>=)
 |(?P<addmoddiv>[%+/])
 |(?P<star>[*])
 |(?P<dot>[.])

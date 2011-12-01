@@ -2,10 +2,11 @@ __all__ = [
 'CppMeta', 'CppStatement', 'IfStatement', 'ElseStatement', 'ForStatement',
 'WhileStatement', 'DoWhileStatement', 'SwitchStatement', 'AssignmentStatement',
 'VarDeclStatement', 'StructDeclStatement', 'ClassDeclStatement',
-'ReturnStatement']
+'ReturnStatement', 'DeleteStatement']
 
 from parser import compile_expression, match, tokenize
 import sys
+from itertools import chain
 
 
 class CppMeta(type):
@@ -32,6 +33,7 @@ class CppMeta(type):
 
 class CppStatement(object):
     __metaclass__ = CppMeta
+    recognize = 'expr semicolon'
     tag = 'cpp'
     extra_contents = []
 
@@ -52,7 +54,9 @@ class CppStatement(object):
 
     __repr__ = __str__
 
-    def tree(self, level, container):
+    def tree(self, level=0, container=None):
+        if container is None:
+            return '\n'.join(self.tree(level, []))
         container.append('%s%s' % ('   ' * level, self.text))
         map(lambda cts: map(lambda x: x.tree(level + 1, container),
                             getattr(self, cts)),
@@ -65,6 +69,9 @@ class CppStatement(object):
         statements = chain(self.sub, (s for cts in self.extra_contents
                                         for s in getattr(self, cts)))
         for statement in statements:
+            if not statement:
+                print "No statement!"
+                continue
             for x in statement.search_iter(predicate):
                 yield x
 
@@ -78,6 +85,11 @@ class IfStatement(CppStatement):
 class ElseStatement(CppStatement):
     tag = 'else'
     recognize = '^kw_else'
+
+
+class DeleteStatement(CppStatement):
+    tag = 'delete'
+    recognize = '^kw_delete'
 
 
 class ForStatement(CppStatement):
@@ -104,6 +116,11 @@ class WhileStatement(CppStatement):
 class ReturnStatement(CppStatement):
     tag = 'return'
     recognize = '^kw_return'
+
+
+class DeleteStatement(CppStatement):
+    tag = 'del'
+    recognize = '^kw_delete'
 
 
 class AssignmentStatement(CppStatement):
@@ -139,7 +156,9 @@ class VarDeclStatement(CppStatement):
 
 class ClassDeclStatement(CppStatement):
     tag = 'class'
+    recognize = 'type_spec* kw_class type_id (colon (scope type_id)+|$)'
 
 
 class StructDeclStatement(CppStatement):
     tag = 'struct'
+    recognize = 'type_spec* kw_struct'

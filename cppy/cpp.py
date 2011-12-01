@@ -46,6 +46,7 @@ def cpp_read(f):
 class Cpp(list):
     keywords = {
             'switch': SwitchStatement,
+            'delete': DeleteStatement,
             'if': IfStatement,
             'do': DoWhileStatement,
             'else': ElseStatement,
@@ -87,7 +88,7 @@ class Cpp(list):
             kw = None
             for w in Cpp.keywords:
                 if lines[start].startswith(w):
-                    if len(lines[start]) > len(w):
+                    if len(lines[start]) >= len(w):
                         c = lines[start][len(w)]
                         if len(c) == 0 or c != '_' and not c.isalnum():
                             kw = w
@@ -138,12 +139,14 @@ class Cpp(list):
         name = type(ret).__name__
         Cpp.incr(name, recog[0])
         grpname = recog[0] and recog[3][0][0] or None
-        if name != 'CppStatement' and grpname != name:
+        if grpname != name:
             print "Experimental recognition discrepancy:"
             print "     ", type(ret).__name__, ret.text
+            print "     ", type(ret).recognize
+            print "     ", tokenize(ret.text)
             print "     ", grpname, recog
             print "--------------------------------------"
-        print counter
+        print counter, ret
         return ret
 
     @staticmethod
@@ -166,9 +169,9 @@ class Cpp(list):
                 return text
 
             def strip3(text):
-                return strip_scope('public',
-                                   strip_scope('private',
-                                               strip_scope('protected', text)))
+                return strip('public',
+                                   strip('private',
+                                               strip('protected', text)))
 
             def strip_helper(st):
                 st.text = strip3(st.text)
@@ -187,7 +190,7 @@ class Cpp(list):
                 exprpos = len(t) - len(expr)
                 expr = expr[:-1]  # strip final ;
                 exprend = exprpos + len(expr)
-                for i in xrange(len(parts)-2, -1, -1):
+                for i in xrange(len(parts) - 2, -1, -1):
                     lvaluepos = t.rfind(parts[i], 0, exprpos)
                     tmp_assign = t[lvaluepos:exprend].strip() + ';'
                     #print "chained assignment#%i:"%i, tmp_assign

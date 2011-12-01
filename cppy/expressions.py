@@ -6,11 +6,36 @@ expressions = {
     'addmoddiv|minus|star',
 
 'binop':
-    'arith|boolop|comp|bitop|assign_set|assign_update',
+    """arith|boolop|comp|open_angle|close_angle|shift
+     | bitop|assign_set|assign_update""",
+
+'id':
+    '(container namespace_member)* symbol',
+
+'id_or_operator':
+    '(container namespace_member)* _id_or_operator',
+
+'_id_or_operator':
+    """symbol
+     | kw_operator
+       ( open_paren close_paren
+       | open_square close_square
+       | arith
+       | boolop
+       )""",
+
+'container':
+    'type_spec* symbol template_inst?',
+
+'type_id':
+    """(kw_template template_spec)?
+       container
+       (namespace_member container)*
+       template_spec?""",
 
 'template_spec':
     """open_angle
-       ((#template_param:qualified_id comma)* qualified_id)?
+       ((#template_param:type_id comma)* id)?
        close_angle""",
 
 'template_inst':
@@ -18,20 +43,14 @@ expressions = {
        ((#template_param:expr comma)* #template_param:expr)?
        close_angle""",
 
-'simple_typename':
-    'type_spec* symbol template_spec?',
-
-'qualified_id':
-    '(simple_typename namespace_member)* simple_typename',
-
 'typecast':
-    'open_paren qualified_id star* close_paren',
+    'open_paren type_id (ampersand|star*) close_paren',
 
-'basic_lvalue':
-    'qualified_id (call|array)*',
+'anon_lvalue_access':
+    'open_square expr close_square | call',
 
-'member':
-    'basic_lvalue (access basic_lvalue)*',
+'raw_lvalue':
+    'id (access lvalue|anon_lvalue_access)*',
 
 'call':
     'open_paren expr_list close_paren',
@@ -40,23 +59,24 @@ expressions = {
     'open_square expr close_square',
 
 'lvalue':
-    'star* typecast* member',
+    'star* typecast* raw_lvalue',
 
 'expr_list':
     'expr (comma expr)*',
 
 'core_decl':
-    'star* qualified_id (assign_set #initialization:expr)?',
+    'star* id (assign_set #initialization:expr)?',
 
 'param_decl':
-    'qualified_id core_decl',
+    'id core_decl',
 
 'param_decl_list':
     'param_decl (comma param_decl)*',
 
 'func_decl':
-    """qualified_id
-       lvalue
+    """type_id
+       id_or_operator
+       template_inst?
        open_paren
        param_decl_list
        close_paren""",
@@ -65,15 +85,15 @@ expressions = {
     'lvalue call',
 
 'var_decl':
-    '^param_decl (comma core_decl)*',
+    '^param_decl (comma core_decl)* semicolon',
 
 'immed':
     'minus number | number | string | char',
 
 'new_inst':
-    """new qualified_id star* (open_square expr close_square
-                              |open_paren expr_list close_paren
-                              )""",
+    """kw_new type_id star* (open_square expr close_square
+                         |open_paren expr_list close_paren
+                         )?""",
 
 'expr1':
     """immed
@@ -84,6 +104,7 @@ expressions = {
      | typecast+ expr1
      | new_inst
      | func_call
+     | ampersand expr1
     """,
 
 'expr2':

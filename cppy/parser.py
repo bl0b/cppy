@@ -11,6 +11,8 @@ ARITY_N = 2 ** 31
 
 arity = {(0, 1): '?', (0, ARITY_N): '*', (1, ARITY_N): '+', (1, 1): ''}
 
+detail_dump_match = False
+
 
 def str_pub(e):
     return e.publish and '%s: ' % e.publish or ''
@@ -58,7 +60,8 @@ bytes.com/topic/python/answers/32098-my-experiences-subclassing-string"""
             i += 1
         ok = self.amin <= (i - i0) <= self.amax
         ok and self.publish and publisher(self.publish, l[i0:i])
-        print "matched", (i - i0), self
+        if detail_dump_match:
+            print "matched", (i - i0), (self.amin, self.amax), self
         return ok, i
 
     def copy(self):
@@ -90,6 +93,8 @@ class Expr(list):
         self.publish = publish
 
     def match(self, l, i, publisher=lambda name, tokens: None):
+        if not self:
+            return False, i
         if (self, i) in self.recursion_watchdog:
             print (self, i), self.recursion_watchdog
             return False, i
@@ -114,7 +119,8 @@ class Expr(list):
         ok = self.amin <= count <= self.amax
         ok and groups and list(starmap(publisher, groups))
         ok and self.publish and publisher(self.publish, l[i0:i1])
-        print "list matched", count, self
+        if detail_dump_match:
+            print "list", repr(self), "matched", count, (self.amin, self.amax)
         return ok, i1
 
     def copy(self):
@@ -158,6 +164,8 @@ class AltExpr(Expr):
         return mk_match
 
     def match(self, l, i, publisher=lambda name, tokens: None):
+        if not self:
+            return False, i
         i0 = i
         count = 0
         ok = True
@@ -175,7 +183,8 @@ class AltExpr(Expr):
 
         ok = self.amin <= count <= self.amax
         ok and groups and list(starmap(publisher, groups))
-        print "alt matched", ok, count, self
+        if detail_dump_match:
+            print "alt matched", count, (self.amin, self.amax), self
         return ok, i
 
     def __repr__(self):
@@ -190,17 +199,32 @@ class ProxyExpr(TokenExpr):
         return TokenExpr.__new__(self, l, amin, amax, publish)
 
     def __init__(self, l, amin=1, amax=1, publish=None):
+        #self.e = named_expression[l].copy()
+        #print l, self.e
+        #self.e.amin = amin
+        #self.e.amax = amax
         TokenExpr.__init__(self, l, amin, amax, publish)
-        self.e = named_expression[self].copy()
-        self.e.amin = self.amin
-        self.e.amax = self.amax
+        #print "proxy", self
+
+    #def _amax_set(self, x):
+    #    self.e.amax = x
+
+    #def _amin_set(self, x):
+    #    self.e.amin = x
+
+    #amin = property(lambda s: s.e.amin, _amin_set)
+    #amax = property(lambda s: s.e.amax, _amax_set)
 
     def copy(self):
-        return ProxyExpr(self, s, amin, amax, self.publish)
+        return ProxyExpr(self, amin, amax, self.publish)
 
     def match(self, l, i, publisher=lambda name, tokens: None):
+        e = named_expression[self].copy()
+        e.amin = self.amin
+        e.amax = self.amax
         pub, g = make_publisher()
-        ok, end = self.e.match(l, i, pub)
+        ok, end = e.match(l, i, pub)
+        #print "proxy", e, (self.amin, self.amax), ok, (i, end)
         ok and g and map(lambda grp: publisher(*grp), g)
         ok and self.publish and publisher(self.publish, l[i:end])
         return ok, end
@@ -225,9 +249,13 @@ class Anchor(object):
         self.amin = 1
         self.amax = 1
         self.publish = None
+        self.cache = None
 
     def match(self, l, i, publisher=lambda name, tokens: None):
         #print "anchor", self.atstart and "start" or "end", i, len(l)
+        if self.cache == (l, i):
+            return False, i
+        self.cache = (l, i)
         return self.atstart and i == 0 or i == len(l), i
 
     def copy(self):
@@ -327,7 +355,7 @@ def sub_compile_expr(tokens, i, inner=False):
             container.append(Expr([], publish=next_publishes))
             next_publishes = None
             i += 1
-        elif t[0] in ('symbol', 'new', 'delete'):
+        elif t[0] in ('symbol'):
             #print "on sym", t[1]
             i += 1
             if t[1] in named_expression:
