@@ -40,7 +40,7 @@ def cpp_read(f):
     for match, replace in reformat.iteritems():
         nocomment = replace.join(ifilter(lambda x: x, nocomment.split(match)))
     lines = imap(str.strip, nocomment.splitlines())
-    return filter(lambda s: s not in ('', ','), lines)
+    return filter(lambda s: s not in ('', ';', ','), lines)
 
 
 class Cpp(list):
@@ -63,8 +63,8 @@ class Cpp(list):
     assignment_op = '(?:%s|%s)' % (assign_set_op, assign_update_op)
     assignment_re = re.compile(r'^[*]*(' + symbol + ')(\[[^]]*\])? *'
                                 + assignment_op + '([^;]+);$')
-    local_var_decl_re = re.compile('^[_a-zA-Z][a-zA-Z0-9<>,*: ]*?('
-                                    + c_symbol + ')( *=.*)?;$')
+    #local_var_decl_re = re.compile('^[_a-zA-Z][a-zA-Z0-9<>,*: ]*?('
+    #                                + c_symbol + ')( *=.*)?;$')
     var_spec = '(?:(?:volatile|static|register)*)'
 
     def __init__(self, f):
@@ -124,29 +124,37 @@ class Cpp(list):
             return ret, start + 1
 
     @staticmethod
-    def incr(name, ok):
+    def incr(name, matchdict):
         global counter
-        ok = ok and 1 or 0
+        ok = bool(name in matchdict or name == 'CppStatement' and matchdict)
         if name in counter:
-            counter[name] = (counter[name][0] + ok, counter[name][1] + 1)
+            counter[name] = (counter[name][0] + int(ok), counter[name][1] + 1)
         else:
-            counter[name] = (ok, 1)
+            counter[name] = (int(ok), 1)
 
     @staticmethod
     def test_recog(ret):
         global counter
         recog = CppMeta.recognize(ret.text)
         name = type(ret).__name__
-        Cpp.incr(name, recog[0])
-        grpname = recog[0] and recog[3][0][0] or None
-        if grpname != name:
-            print "Experimental recognition discrepancy:"
-            print "     ", type(ret).__name__, ret.text
-            print "     ", type(ret).recognize
-            print "     ", tokenize(ret.text)
-            print "     ", grpname, recog
-            print "--------------------------------------"
-        print counter, ret
+        Cpp.incr(name, recog)
+        #grpname = recog[0] and recog[3][0][0] or None
+        #if grpname != name:
+        if name not in recog:
+            if name != 'CppStatement' or not recog:  #grpname is None:
+                print "======================================================="
+                print "Experimental recognition discrepancy:"
+                print "     ", type(ret).__name__, ret.text
+                print "     ", type(ret).recognize
+                print "     ", tokenize(ret.text)
+                #print "     ", grpname, recog
+                print "     ", recog
+                print "--------------------------------------"
+            elif recog:  #grpname is not None:
+                print "Experimental recognition detected a",
+                print recog
+                #print grpname, ":", ret.text
+        #print counter, ret
         return ret
 
     @staticmethod
@@ -204,16 +212,18 @@ class Cpp(list):
                 #ret.sub = statement.sub
                 #ret.lvalue = m.group(1)
                 return ret
-        if Cpp.local_var_decl_re.match(statement.text):
-            #print "DETECTED LOCAL VAR DECL"
-            ok, start, end, grps = match(tokenize(statement.text), 'var_decl')
-            #print ok and "SUCCESS" or "FAILED", statement.text, grps
-            #    print tokenize(statement.text)
-            #    #dump_expression('var_decl')
+        # This is WAY too buggy
+        #if Cpp.local_var_decl_re.match(statement.text):
+        #    #print "DETECTED LOCAL VAR DECL"
+        #    ok, start, end, grps = match(tokenize(statement.text), 'var_decl')
+        #    #print ok and "SUCCESS" or "FAILED", statement.text, grps
+        #    #    print tokenize(statement.text)
+        #    #    #dump_expression('var_decl')
+        #
+        #    ret = VarDeclStatement(statement.text)
+        #    ret.sub = statement.sub
+        #    return ret
 
-            ret = VarDeclStatement(statement.text)
-            ret.sub = statement.sub
-            return ret
         # tokenize to differentiate the rest
         #print "TOKENIZING", statement.text
         #for x in tokenize(statement.text):

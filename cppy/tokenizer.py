@@ -8,18 +8,18 @@ from itertools import chain
 #http://stackoverflow.com/questions/2358890
 #/python-lexical-analysis-and-tokenization
 
-num = r"(?:\.[0-9]+|(?:0|[1-9][0-9]*)(?:\.[0-9]*)?)"
+num = r"(?:\.[0-9]+|(?:[0-9]+)(?:\.[0-9]*)?)"
 expo = r"(?:[eE]-?[0-9]+\.?[0-9]*)?[lLdf]?"
 number = num + expo
 
 keyword = [
     'kw_switch', 'kw_class', 'kw_while', 'kw_do', 'kw_for',
     'kw_if', 'kw_else', 'kw_struct', 'kw_union', 'kw_return',
-    'kw_new', 'kw_delete', 'kw_operator'
+    'kw_new', 'kw_delete', 'kw_operator', 'kw_typename', 'kw_template',
 ]
 
 type_spec = [
-    'typename', 'const', 'static', 'register', 'volatile',
+    'typename', 'const', 'static', 'register', 'volatile', 'virtual',
     'extern', 'long', 'short', 'unsigned', 'signed', 'friend',
 ]
 
@@ -40,6 +40,7 @@ token_pattern = r"""
 |(?P<kw_union>\bunion\b)
 |(?P<kw_return>\breturn\b)
 |(?P<kw_template>\btemplate\b)
+|(?P<kw_typename>\btypename\b)
 |(?P<kw_operator>\boperator\b)
 |(?P<scope>\b(?:""" + '|'.join(scope) + r""")\b)
 |(?P<type_spec>\b(?:""" + '|'.join(type_spec) + r""")\b)
@@ -51,6 +52,7 @@ token_pattern = r"""
 |(?P<comma>[,])
 |(?P<minus>[-])
 |(?P<semicolon>[;])
+|(?P<tilde>[~])
 |(?P<open_angle>(?<!<)[<](?!<))
 |(?P<close_angle>(?<!>)[>](?!>))
 |(?P<open_square>[[])
@@ -70,7 +72,7 @@ token_pattern = r"""
 |(?P<string>"(?:\\["bntr]|[^\\])*")
 |(?P<char>'(?:\\['bntr]|[^\\])')
 |(?P<boolop>[|][|]|[&][&]|!)
-|(?P<bitop>(?<!\|)\|(?!\|) | (?<!\&)\&(?!\&) | [~] | (?<!\^)\^(?!\^))
+|(?P<bitop>(?<!\|)\|(?!\|) | (?<!\^)\^(?!\^))
 |(?P<comp>==|!=|<=|>=)
 |(?P<addmoddiv>[%+/])
 |(?P<star>[*])

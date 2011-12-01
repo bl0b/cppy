@@ -2,11 +2,11 @@ __all__ = [
 'CppMeta', 'CppStatement', 'IfStatement', 'ElseStatement', 'ForStatement',
 'WhileStatement', 'DoWhileStatement', 'SwitchStatement', 'AssignmentStatement',
 'VarDeclStatement', 'StructDeclStatement', 'ClassDeclStatement',
-'ReturnStatement', 'DeleteStatement']
+'ReturnStatement', 'DeleteStatement', 'FuncDeclStatement']
 
 from parser import compile_expression, match, tokenize
 import sys
-from itertools import chain
+from itertools import chain, imap
 
 
 class CppMeta(type):
@@ -16,19 +16,52 @@ class CppMeta(type):
 
     def __init__(cls, name, bases, dic):
         if 'recognize' in dic and dic['recognize'] != '':
-            CppMeta.recognizers[name] = dic['recognize']
-            CppMeta.recog_expr = None
+            CppMeta.recognizers[name] = \
+                '#%s:(%s)' % (name, dic['recognize'])
+            #CppMeta.recog_expr = None
         type.__init__(cls, name, bases, dic)
 
     @classmethod
+    def __recog(cls, tokens):
+        m = lambda v: match(tokens, v)
+        #print cls.recognizers
+        tmp = [g[0] for ok, start, end, g
+                     in imap(m, cls.recognizers.itervalues())
+                     if ok and g]
+        #print "=>", tmp
+        return dict(tmp)
+
+    @classmethod
     def recognize(cls, text):
-        if cls.recog_expr is None:
-            recog_str = '|'.join("#%s:(%s)" % i
-                                 for i in cls.recognizers.iteritems())
-            print >> sys.stderr, "Rebuilding statement recognizer:", recog_str
-            cls.recog_expr = compile_expression(recog_str,
-                                                name=cls.recog_expr_name)
-        return match(tokenize(text), cls.recog_expr_name)
+        tokens = tokenize(text)
+        ok, start, end, groups = match(tokens, 'c_label|(scope colon)')
+        if ok:
+            tokens = tokens[end:]
+        ret = {}
+        while tokens and not ret:
+            ret = cls.__recog(tokens)
+            if not ret:
+                # try to remove leading macros...
+                ok, start, end, groups = match(tokens, 'macro')
+                if ok:
+                    tokens = tokens[end:]
+                else:
+                    break
+        return ret
+
+
+
+
+        #if cls.recog_expr is None:
+        #    # discard C label declaration if present
+        #    recog_str = "(symbol colon)? ("
+        #    recog_str += '|'.join("#%s:(%s)" % i
+        #                          for i in cls.recognizers.iteritems())
+        #    recog_str += ')'
+        #    print >> sys.stderr, "Rebuilding statement recognizer:", recog_str
+        #    cls.recog_expr = compile_expression(recog_str,
+        #                                        name=cls.recog_expr_name)
+        #return match(tokenize(text), cls.recog_expr_name)
 
 
 class CppStatement(object):
@@ -156,9 +189,31 @@ class VarDeclStatement(CppStatement):
 
 class ClassDeclStatement(CppStatement):
     tag = 'class'
-    recognize = 'type_spec* kw_class type_id (colon (scope type_id)+|$)'
+    recognize = """type_spec*
+                   kw_class
+                   type_id
+                   (colon
+                    scope
+                    type_id
+                    (comma scope type_id)*
+                   )?"""
+
+
+class ConstructorStatement(CppStatement):
+    tag = 'ctor'
+    recognize = 'constructor_decl'
+
+
+class DestructorStatement(CppStatement):
+    tag = 'dtor'
+    recognize = 'destructor_decl'
 
 
 class StructDeclStatement(CppStatement):
     tag = 'struct'
     recognize = 'type_spec* kw_struct'
+
+
+class FuncDeclStatement(CppStatement):
+    tag = 'func'
+    recognize = '^func_decl'

@@ -7,7 +7,10 @@ expressions = {
 
 'binop':
     """arith|boolop|comp|open_angle|close_angle|shift
-     | bitop|assign_set|assign_update""",
+     | bitop|tilde|ampersand|assign_set|assign_update""",
+
+'ref_deref':
+    'ampersand|star',
 
 'id':
     '(container namespace_member)* symbol',
@@ -20,7 +23,8 @@ expressions = {
      | kw_operator
        ( open_paren close_paren
        | open_square close_square
-       | arith
+       | ref_deref
+       | binop
        | boolop
        )""",
 
@@ -31,20 +35,28 @@ expressions = {
     """(kw_template template_spec)?
        container
        (namespace_member container)*
-       template_spec?""",
+       template_inst?
+       ref_deref*""",
+
+'template_param_spec':
+    '(kw_template|kw_typename|kw_class|kw_struct|kw_union)? type_id',
 
 'template_spec':
     """open_angle
-       ((#template_param:type_id comma)* id)?
+       (#template_param:template_param_spec
+        (comma #template_param:template_param_spec)*
+       )?
        close_angle""",
 
 'template_inst':
     """open_angle
-       ((#template_param:expr comma)* #template_param:expr)?
+       ( (#template_param:(type_id|expr) comma)*
+         #template_param:(type_id|expr)
+       )?
        close_angle""",
 
 'typecast':
-    'open_paren type_id (ampersand|star*) close_paren',
+    'open_paren type_id close_paren',
 
 'anon_lvalue_access':
     'open_square expr close_square | call',
@@ -53,7 +65,7 @@ expressions = {
     'id (access lvalue|anon_lvalue_access)*',
 
 'call':
-    'open_paren expr_list close_paren',
+    'open_paren expr_list? close_paren',
 
 'array':
     'open_square expr close_square',
@@ -65,27 +77,50 @@ expressions = {
     'expr (comma expr)*',
 
 'core_decl':
-    'star* id (assign_set #initialization:expr)?',
+    """ref_deref*
+       id?
+       ( call
+       | (open_square expr? close_square)?
+         (assign_set #initialization:expr)?
+       )""",
 
 'param_decl':
-    'id core_decl',
+    'type_id core_decl',
 
 'param_decl_list':
     'param_decl (comma param_decl)*',
 
+'constructor_decl':
+    """(kw_template template_spec)?
+       symbol
+       template_inst?
+       open_paren param_decl_list? close_paren
+       (colon
+        type_id call
+        (comma type_id call)*
+       )?""",
+
+'destructor_decl':
+    'type_spec? tilde symbol open_paren close_paren',
+
 'func_decl':
-    """type_id
+    """(kw_template template_spec)?
+       type_id
        id_or_operator
        template_inst?
        open_paren
-       param_decl_list
-       close_paren""",
+       param_decl_list?
+       close_paren
+       type_spec?""",  # final const if present
 
 'func_call':
-    'lvalue call',
+    'lvalue call | type_id call',
+
+'macro':
+    'symbol call?',
 
 'var_decl':
-    '^param_decl (comma core_decl)* semicolon',
+    'param_decl (comma core_decl)* semicolon',
 
 'immed':
     'minus number | number | string | char',
@@ -105,13 +140,17 @@ expressions = {
      | new_inst
      | func_call
      | ampersand expr1
+     | star expr1
     """,
 
 'expr2':
-    'expr1 (binop expr1)*',
+    'expr1 (binop expr2)?',
 
 'expr':
     'expr2 (ternary expr colon expr)?',
+
+'c_label':
+    'symbol colon',
 
 #'expr':
 #    """immed

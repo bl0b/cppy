@@ -15,7 +15,7 @@ detail_dump_match = False
 
 
 def str_pub(e):
-    return e.publish and '%s: ' % e.publish or ''
+    return e.publish and '#%s:' % e.publish or ''
 
 
 def make_tuple(x):
@@ -199,35 +199,39 @@ class ProxyExpr(TokenExpr):
         return TokenExpr.__new__(self, l, amin, amax, publish)
 
     def __init__(self, l, amin=1, amax=1, publish=None):
-        #self.e = named_expression[l].copy()
-        #print l, self.e
-        #self.e.amin = amin
-        #self.e.amax = amax
         TokenExpr.__init__(self, l, amin, amax, publish)
-        #print "proxy", self
-
-    #def _amax_set(self, x):
-    #    self.e.amax = x
-
-    #def _amin_set(self, x):
-    #    self.e.amin = x
-
-    #amin = property(lambda s: s.e.amin, _amin_set)
-    #amax = property(lambda s: s.e.amax, _amax_set)
+        self.cache = type(l) is ProxyExpr and l.cache or None
+        self.e = type(l) is ProxyExpr and l.e or None
 
     def copy(self):
         return ProxyExpr(self, amin, amax, self.publish)
 
     def match(self, l, i, publisher=lambda name, tokens: None):
-        e = named_expression[self].copy()
-        e.amin = self.amin
-        e.amax = self.amax
+        ne = named_expression[self]
+        count = 0
+        ok = True
+        i0 = i
         pub, g = make_publisher()
-        ok, end = e.match(l, i, pub)
-        #print "proxy", e, (self.amin, self.amax), ok, (i, end)
+        while ok and i < len(l) and count < self.amax:
+            ok, i = ne.match(l, i, pub)
+            count += int(ok)
+        ok = self.amin <= count <= self.amax
         ok and g and map(lambda grp: publisher(*grp), g)
-        ok and self.publish and publisher(self.publish, l[i:end])
-        return ok, end
+        ok and self.publish and publisher(self.publish, l[i0:i])
+        return ok, i
+
+        #if self.cache is not ne:
+        #    print "Proxy", self, "makes new copy of '%s'" % ne
+        #    print "      in cache", id(self.cache), "expr", id(ne)
+        #    self.cache = ne
+        #    self.e = self.cache.copy()
+        #    self.e.amin = self.amin
+        #    self.e.amax = self.amax
+        #pub, g = make_publisher()
+        #ok, end = self.e.match(l, i, pub)
+        #ok and g and map(lambda grp: publisher(*grp), g)
+        #ok and self.publish and publisher(self.publish, l[i:end])
+        #return ok, end
 
     def __eq__(self, e):
         streq = str.__eq__(self, e)
