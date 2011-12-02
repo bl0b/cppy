@@ -117,8 +117,8 @@ class Expr(list):
         if ok:
             i1 = i
         ok = self.amin <= count <= self.amax
-        ok and groups and list(starmap(publisher, groups))
         ok and self.publish and publisher(self.publish, l[i0:i1])
+        ok and groups and list(starmap(publisher, groups))
         if detail_dump_match:
             print "list", repr(self), "matched", count, (self.amin, self.amax)
         return ok, i1
@@ -177,8 +177,8 @@ class AltExpr(Expr):
                            key=lambda (ok, i, g): ok and i or 0)
             if not ok:
                 break
-            ok and g and list(starmap(subpub, g))
             ok and self.publish and subpub(self.publish, l[i0:i])
+            ok and g and list(starmap(subpub, g))
             count += 1
 
         ok = self.amin <= count <= self.amax
@@ -216,8 +216,8 @@ class ProxyExpr(TokenExpr):
             ok, i = ne.match(l, i, pub)
             count += int(ok)
         ok = self.amin <= count <= self.amax
-        ok and g and map(lambda grp: publisher(*grp), g)
         ok and self.publish and publisher(self.publish, l[i0:i])
+        ok and g and map(lambda grp: publisher(*grp), g)
         return ok, i
 
         #if self.cache is not ne:

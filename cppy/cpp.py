@@ -43,7 +43,8 @@ def cpp_read(f):
     return filter(lambda s: s not in ('', ';', ','), lines)
 
 
-class Cpp(list):
+class Cpp(Scope):
+    "Usable representation of a C++ file. Tries to be as accurate as possible."
     keywords = {
             'switch': SwitchStatement,
             'delete': DeleteStatement,
@@ -68,15 +69,15 @@ class Cpp(list):
     var_spec = '(?:(?:volatile|static|register)*)'
 
     def __init__(self, f):
-        list.__init__(self)
+        Scope.__init__(self)
         lines = cpp_read(f)
         start = 0
         while start < len(lines):
             statement, start = Cpp._parse(self, lines, start, 0, 0)
-            self.append(statement)
+            self.sub.append(statement)
 
     @staticmethod
-    def _parse(context, lines, start, level, context_in_for):
+    def _parse(scope, lines, start, level, context_in_for):
 
         def line(l):
             return lines[l]
@@ -89,7 +90,7 @@ class Cpp(list):
             for w in Cpp.keywords:
                 if lines[start].startswith(w):
                     if len(lines[start]) >= len(w):
-                        c = lines[start][len(w)]
+                        c = lines[start][len(w):]
                         if len(c) == 0 or c != '_' and not c.isalnum():
                             kw = w
                             break
@@ -97,14 +98,15 @@ class Cpp(list):
             #if firstword in Cpp.keywords:
             if kw:
                 #ret = Cpp.keywords[firstword](lines[start])
-                ret = Cpp.keywords[kw](lines[start])
+                ret = Cpp.keywords[kw](lines[start], scope)
             else:
-                ret = CppStatement(lines[start])
+                ret = CppStatement(lines[start], scope)
         if (start + 1) < len(lines) and lines[start + 1] == '{':
             start += 2
             IN_FOR = 0
+            print "in", ret
             while start < len(lines) and lines[start] != '}':
-                statement, start = Cpp._parse(ret.sub, lines, start,
+                statement, start = Cpp._parse(ret, lines, start,
                                               level + 1, IN_FOR)
                 if not IN_FOR:
                     ret.sub.append(statement)
@@ -119,7 +121,8 @@ class Cpp(list):
         #                     ret.text, CppMeta.recognize(ret.text)
         # END TESTING !
         if context_in_for == 0:
-            return Cpp.test_recog(Cpp.postprocess(ret, context)), start + 1
+            pp = Cpp.postprocess(ret, scope)
+            return Cpp.test_recog(pp, scope), start + 1
         else:
             return ret, start + 1
 
@@ -133,15 +136,15 @@ class Cpp(list):
             counter[name] = (int(ok), 1)
 
     @staticmethod
-    def test_recog(ret):
+    def test_recog(ret, scope):
         global counter, ambiguities
-        recog = CppMeta.recognize(ret.text)
+        recog = CppMeta.recognize(ret.text, scope)
         name = type(ret).__name__
         Cpp.incr(name, recog)
         #grpname = recog[0] and recog[3][0][0] or None
         #if grpname != name:
         if name not in recog:
-            if name != 'CppStatement' or not recog:  #grpname is None:
+            if name != 'CppStatement' or not recog:  # grpname is None:
                 print "======================================================="
                 print "Experimental recognition discrepancy:"
                 print "     ", type(ret).__name__, ret.text
@@ -150,7 +153,7 @@ class Cpp(list):
                 #print "     ", grpname, recog
                 print "     ", recog
                 print "--------------------------------------"
-            elif recog:  #grpname is not None:
+            elif recog:  # grpname is not None:
                 #print "Experimental recognition detected a",
                 #print recog
                 #print grpname, ":", ret.text
@@ -167,14 +170,14 @@ class Cpp(list):
         return ret
 
     @staticmethod
-    def postprocess(statement, context):
-        c_type = len(context) and type(context[-1]) or None
+    def postprocess(statement, scope):
+        c_type = len(scope.sub) and type(scope.sub[-1]) or None
         if type(statement) is ElseStatement and c_type is IfStatement:
-            ret = context.pop()
+            ret = scope.sub.pop()
             ret.elses.append(statement)
             return ret
         if type(statement) is WhileStatement and c_type is DoWhileStatement:
-            ret = context.pop()
+            ret = scope.sub.pop()
             ret.whilecond.append(statement)
             return ret
         if type(statement) in (ClassDeclStatement, StructDeclStatement):
@@ -211,13 +214,13 @@ class Cpp(list):
                     lvaluepos = t.rfind(parts[i], 0, exprpos)
                     tmp_assign = t[lvaluepos:exprend].strip() + ';'
                     #print "chained assignment#%i:"%i, tmp_assign
-                    context.append(AssignmentStatement(tmp_assign))
+                    scope.sub.append(AssignmentStatement(tmp_assign, scope))
                     exprpos = lvaluepos
                     exprend = lvaluepos + len(parts[i])
-                return context.pop()  # "much more better" ((C) Jack Sparrow)
+                return scope.sub.pop()  # "much more better" ((C) Jack Sparrow)
                                       # to keep the code simple
             else:
-                ret = AssignmentStatement(statement.text)
+                ret = AssignmentStatement(statement.text, scope)
                 #ret.sub = statement.sub
                 #ret.lvalue = m.group(1)
                 return ret
@@ -241,13 +244,19 @@ class Cpp(list):
 
     def tree(self):
         ret = []
-        map(lambda x: x.tree(container=ret), self)
+        map(lambda x: x.tree(container=ret), self.sub)
         return '\n'.join(ret)
 
     def search_iter(self, predicate):
-        for gen in map(lambda x: x.search_iter(predicate), self):
+        for gen in imap(lambda x: x.search_iter(predicate), self.sub):
             for x in gen:
                 yield x
+
+    def __str__(self):
+        return dict.__str__(self) + str(self.sub)
+
+    def __repr__(self):
+        return dict.__repr__(self) + repr(self.sub)
 
 #DELETEME!
 counter = {}

@@ -96,21 +96,27 @@ expressions = {
 
 'core_decl':
     """ref_deref*
-       id
+       #id:id
+       (open_square close_square)?
        ( call
-       | (open_square expr? close_square)?
+       | (open_square expr number? close_square)?
          (assign_set #initialization:expr)?
        )""",
 
 'param_decl':
-    '#type:type_id #id:id (assign_set #initialization:expr)?',
+    """#type:type_id
+       ref_deref*
+       #id:id
+       (open_square number? close_square)?
+       (open_square number? close_square)*
+       #initialisation:(assign_set expr)?""",
 
 'param_decl_list':
     '#param:param_decl (comma #param:param_decl)*',
 
 'constructor_decl':
     """(kw_template template_spec)?
-       symbol
+       type_id
        template_inst?
        open_paren param_decl_list? close_paren
        (colon
@@ -119,7 +125,11 @@ expressions = {
        )?""",
 
 'destructor_decl':
-    'type_spec? tilde symbol open_paren close_paren',
+    """type_spec?
+       (type_id namespace_member)?
+       tilde
+       symbol
+       open_paren close_paren""",
 
 'func_decl':
     """#template_type:(kw_template template_spec)?
@@ -132,7 +142,7 @@ expressions = {
        type_spec?""",  # final const if present
 
 'var_decl':
-    'param_decl (comma core_decl)* semicolon',
+    '#type:type_id core_decl (comma #decl:core_decl)* semicolon',
 
 # EXPRESSIONS
 
@@ -147,12 +157,12 @@ expressions = {
 'expr1':
     """immed
      | lvalue
-     | incdec lvalue
-     | lvalue incdec
-     | open_paren expr close_paren
+     | incdec #UPDATE_TARGET:lvalue
+     | #UPDATE_TARGET:lvalue incdec
+     | open_paren expr close_paren (open_square expr close_square)*
      | typecast+ expr1
-     | new_inst
-     | func_call
+     | #CREATION:new_inst
+     | #CALL:func_call
      | ampersand expr1
      | star expr1
     """,

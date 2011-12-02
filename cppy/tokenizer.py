@@ -13,8 +13,8 @@ expo = r"(?:[eE]-?[0-9]+\.?[0-9]*)?[lLdf]?"
 number = num + expo
 
 keyword = [
-    'kw_switch', 'kw_class', 'kw_while', 'kw_do', 'kw_for',
-    'kw_if', 'kw_else', 'kw_struct', 'kw_union', 'kw_return',
+    'kw_switch', 'kw_class', 'kw_while', 'kw_do', 'kw_for', 'kw_typedef',
+    'kw_if', 'kw_else', 'kw_struct', 'kw_union', 'kw_return', 'kw_namespace',
     'kw_new', 'kw_delete', 'kw_operator', 'kw_typename', 'kw_template',
 ]
 
@@ -25,7 +25,8 @@ type_spec = [
 
 scope = ['public', 'private', 'protected']
 
-sym_assert = ''.join('(?!(?P=%s))' % i for i in chain(keyword, ['type_spec', 'scope']))
+sym_assert = ''.join('(?!(?P=%s))' % i
+                     for i in chain(keyword, ['type_spec', 'scope']))
 
 token_pattern = r"""
 (?P<number>""" + number + r""")
@@ -33,6 +34,8 @@ token_pattern = r"""
 |(?P<kw_class>\bclass\b)
 |(?P<kw_while>\bwhile\b)
 |(?P<kw_do>\bdo\b)
+|(?P<kw_namespace>\bnamespace\b)
+|(?P<kw_typedef>\btypedef\b)
 |(?P<kw_for>\bfor\b)
 |(?P<kw_if>\bif\b)
 |(?P<kw_else>\belse\b)
@@ -69,8 +72,8 @@ token_pattern = r"""
 |(?P<assign_update>(?:>>|<<|(?<![<>])[<>]|[&^%*/+-])[=](?!=))
 |(?P<shift>(>>|<<)(?!=))
 |(?P<incdec>[+][+]|--)
-|(?P<string>"(?:\\["bntr]|[^\\])*")
-|(?P<char>'(?:\\['bntr]|[^\\])')
+|(?P<string>"(?:\\["bntr]|[^\\"])*")
+|(?P<char>'(?:\\['bntr\\]|[^\\'])')
 |(?P<boolop>[|][|]|[&][&]|!)
 |(?P<bitop>(?<!\|)\|(?!\|) | (?<!\^)\^(?!\^))
 |(?P<comp>==|!=|<=|>=)

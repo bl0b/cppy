@@ -2,11 +2,30 @@ __all__ = [
 'CppMeta', 'CppStatement', 'IfStatement', 'ElseStatement', 'ForStatement',
 'WhileStatement', 'DoWhileStatement', 'SwitchStatement', 'AssignmentStatement',
 'VarDeclStatement', 'StructDeclStatement', 'ClassDeclStatement',
-'ReturnStatement', 'DeleteStatement', 'FuncDeclStatement']
+'ReturnStatement', 'DeleteStatement', 'FuncDeclStatement', 'Scope',
+]
 
 from parser import compile_expression, match, tokenize
 import sys
 from itertools import chain, imap
+
+
+class Scope(dict):
+    def __init__(self, parent=None):
+        dict.__init__(self)
+        self.sub = []
+        self.parent = []
+
+    def resolve(self, x):
+        if x in self:
+            return self[x]
+        if self.parent:
+            return self.parent.resolve(x)
+        return None
+
+    @property
+    def scope(self):
+        return self
 
 
 class CppMeta(type):
@@ -17,37 +36,26 @@ class CppMeta(type):
     def __init__(cls, name, bases, dic):
         if 'recognize' in dic and dic['recognize'] != '':
             CppMeta.recognizers[name] = \
-                '#%s:(%s)' % (name, dic['recognize'])
-            #CppMeta.recog_expr = None
+                    dic['recognize']
         type.__init__(cls, name, bases, dic)
 
     @classmethod
-    def __recog(cls, tokens):
+    def __recog(cls, tokens, scope):
         m = lambda v: match(tokens, v)
-        #print cls.recognizers
-        tmp = [(g[0][0], g) for ok, start, end, g
-                     in imap(m, cls.recognizers.itervalues())
-                     if ok and g]
-        #print "=>", tmp
-        return dict(tmp)
+        ret = {}
+        for name, rec in cls.recognizers.iteritems():
+            ok, start, end, g = m(rec)
+            if ok:
+                ret[name] = g
+        return ret
 
     @classmethod
-    def recognize(cls, text):
+    def recognize(cls, text, scope):
         tokens = tokenize(text)
         ok, start, end, groups = match(tokens, 'c_label|(scope colon)')
         if ok:
             tokens = tokens[end:]
-        #ret = {}
-        #while tokens and not ret:
-        #    ret = cls.__recog(tokens)
-        #    if not ret:
-        #        # try to remove leading macros...
-        #        ok, start, end, groups = match(tokens, 'macro')
-        #        if ok:
-        #            tokens = tokens[end:]
-        #        else:
-        #            break
-        ret = cls.__recog(tokens)
+        ret = cls.__recog(tokens, scope)
         if ret and len(ret) > 1:
             # try and disambiguate stuff
             # first, a derived class has priority over the base class.
@@ -59,49 +67,47 @@ class CppMeta(type):
                 others = tuple(cl for cl in classes if cl is not c)
                 return issubclass(c, others)
             classes = filter(test_class, classes)
+            classes = map(lambda c: (c, c.validate(ret[c.__name__], scope)),
+                          classes)
+            classes = filter(lambda (cls, (ok, payload)): ok, classes)
             #print "AFTER disambiguation by derivation", classes
             if len(classes) == 1:
-                c = classes[0].__name__
+                c = classes[0][0].__name__
                 return {c: ret[c]}
         return ret
 
 
-
-
-        #if cls.recog_expr is None:
-        #    # discard C label declaration if present
-        #    recog_str = "(symbol colon)? ("
-        #    recog_str += '|'.join("#%s:(%s)" % i
-        #                          for i in cls.recognizers.iteritems())
-        #    recog_str += ')'
-        #    print >> sys.stderr, "Rebuilding statement recognizer:", recog_str
-        #    cls.recog_expr = compile_expression(recog_str,
-        #                                        name=cls.recog_expr_name)
-        #return match(tokenize(text), cls.recog_expr_name)
-
-
-class CppStatement(object):
+class CppStatement(dict):
     __metaclass__ = CppMeta
     recognize = 'semicolon semicolon'  # will never match :)
     tag = 'cpp'
     extra_contents = []
 
-    def __init__(self, text):
+    def __init__(self, text, parent):
         #print "init cpp statement", type(self), text
         self.text = text
+        self._scope = parent
         self.sub = []
+        self.scope = parent
         for xc in self.extra_contents:
             setattr(self, xc, [])
+
+    def resolve(self, x):
+        if x in self:
+            return self[x]
+        if self.scope:
+            return self.scope.resolve(x)
+        return None
 
     def itemize(self):
         return match(tokenize(self.text), self.recognize)
 
     def __str__(self):
         ret = self.tag + '(' + self.text
-        if self.sub:
-            ret += ' [%i sub-statements])' % len(self.sub)
-        else:
-            ret += ')'
+        #if self.sub:
+        #    ret += ' [%i sub-statements])' % len(self.sub)
+        #else:
+        #    ret += ')'
         return ret
 
     __repr__ = __str__
@@ -126,6 +132,15 @@ class CppStatement(object):
                 continue
             for x in statement.search_iter(predicate):
                 yield x
+
+    @classmethod
+    def validate(self, groups, scope):
+        return True, None
+
+
+class TypedefStatement(CppStatement):
+    tag = 'typedef'
+    recognize = 'kw_typedef type_id type_id'
 
 
 class ExprStatement(CppStatement):
@@ -180,17 +195,14 @@ class DeleteStatement(CppStatement):
     recognize = '^kw_delete'
 
 
+class NamespaceStatement(CppStatement):
+    tag = 'namespace'
+    recognize = '^kw_namespace symbol'
+
+
 class AssignmentStatement(ExprStatement):
     tag = 'assign'
     recognize = '^ assignment'
-
-    def __init__(self, text):
-        CppStatement.__init__(self, text)
-        #parts = re.split(Cpp.assignment_op, text)
-        #self.lvalue = parts[0]
-        #is_assign_set = re.findall(Cpp.assign_set_op, text)
-        #self.assign_type = is_assign_set and 'set' or 'update'
-        self.parse()
 
     def parse(self):
         ok, start, end, groups = match(tokenize(self.text), 'assignment')
@@ -206,9 +218,29 @@ class AssignmentStatement(ExprStatement):
             print "FAILURE", self.text, groups
 
 
-class VarDeclStatement(CppStatement):
+# a declaration of pointer variable may look like an arithmetic expression
+class VarDeclStatement(ExprStatement):
     tag = 'var'
-    recognize = '^var_decl'
+    recognize = 'var_decl'
+
+    @classmethod
+    def validate(self, groups, scope):
+        vtype = (('symbol', 'int'),)
+        vinit = tuple()
+        for name, cts in groups:
+            print name, "->", cts
+            if name == 'type':
+                t = scope.resolve(cts)
+                #if t is None or t[0] != 'type':
+                #    return False, None
+                vtype = cts
+            elif name == 'id':
+                vid = cts
+            elif name == 'initialization':
+                vinit = cts
+        scope[vid] = ('var', vtype, vinit)
+
+        return True, None
 
 
 class ClassDeclStatement(CppStatement):
@@ -223,12 +255,17 @@ class ClassDeclStatement(CppStatement):
                    )?"""
 
 
-class ConstructorStatement(CppStatement):
+class FuncDeclStatement(CppStatement):
+    tag = 'func'
+    recognize = '^func_decl'
+
+
+class ConstructorStatement(FuncDeclStatement):
     tag = 'ctor'
     recognize = 'constructor_decl'
 
 
-class DestructorStatement(CppStatement):
+class DestructorStatement(FuncDeclStatement):
     tag = 'dtor'
     recognize = 'destructor_decl'
 
@@ -238,6 +275,6 @@ class StructDeclStatement(CppStatement):
     recognize = 'type_spec* kw_struct'
 
 
-class FuncDeclStatement(CppStatement):
-    tag = 'func'
-    recognize = '^func_decl'
+class ExternLinkage(CppStatement):
+    tag = 'extern'
+    recognize = 'type_spec string $'
