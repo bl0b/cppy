@@ -1,20 +1,47 @@
 __all__ = [
 'CppMeta', 'CppStatement', 'IfStatement', 'ElseStatement', 'ForStatement',
 'WhileStatement', 'DoWhileStatement', 'SwitchStatement', 'AssignmentStatement',
-'VarDeclStatement', 'StructDeclStatement', 'ClassDeclStatement',
-'ReturnStatement', 'DeleteStatement', 'FuncDeclStatement', 'Scope',
+'VarDeclStatement', 'ClassDeclStatement', 'ReturnStatement', 'DeleteStatement',
+'FuncDeclStatement', 'Scope',
 ]
 
 from parser import compile_expression, match, tokenize
 import sys
-from itertools import chain, imap
+from itertools import chain, imap, starmap
+
+
+class CppException(Exception):
+    pass
+
+
+class UnhandledCapture(CppException):
+
+    def __init__(self, name, toks):
+        CppException.__init__(self, "Capture <%s> has no handler!" % name)
+        self.capture_name = name
+        self.capture_tokens = toks
+
+
+class AmbiguousStatement(CppException):
+
+    def __init__(self, text, scope, classes):
+        CppException.__init__(self, "Ambiguous statement: < %s > %s" % (
+                                    text, str(classes)))
+        self.text = text
+        self.scope = scope
+        self.classes = classes
+
+
+class InvalidStatement(CppException):
+    pass
 
 
 class Scope(dict):
+
     def __init__(self, parent=None):
         dict.__init__(self)
         self.sub = []
-        self.parent = []
+        self.parent = parent
 
     def resolve(self, x):
         if x in self:
@@ -23,9 +50,20 @@ class Scope(dict):
             return self.parent.resolve(x)
         return None
 
-    @property
-    def scope(self):
-        return self
+    def process_payload(self, gname, gtoks):
+        hook = 'hook_' + gname
+        if hook in dir(self):
+            return getattr(self, hook)(gtoks)
+        elif self.parent:
+            return self.parent.process_payload(gname, gtoks)
+        else:
+            raise UnhandledCapture(gname, gtoks)
+
+    def copy(self):
+        ret = Scope(self.parent)
+        ret.update(self)
+        ret.sub = list(self.sub)
+        return ret
 
 
 class CppMeta(type):
@@ -56,48 +94,65 @@ class CppMeta(type):
         if ok:
             tokens = tokens[end:]
         ret = cls.__recog(tokens, scope)
+        clsbyname = lambda n: getattr(sys.modules[__name__], n)
+        classes = map(clsbyname, ret.iterkeys())
+        print "     classes", classes
+
         if ret and len(ret) > 1:
             # try and disambiguate stuff
             # first, a derived class has priority over the base class.
-            clsbyname = lambda n: getattr(sys.modules[__name__], n)
-            classes = map(clsbyname, ret.iterkeys())
-            #print "BEFORE disambiguation by derivation", classes
+            print "     more than one possible meaning"
 
             def test_class(c):
                 others = tuple(cl for cl in classes if cl is not c)
                 return issubclass(c, others)
-            classes = filter(test_class, classes)
-            classes = map(lambda c: (c, c.validate(ret[c.__name__], scope)),
-                          classes)
-            classes = filter(lambda (cls, (ok, payload)): ok, classes)
-            #print "AFTER disambiguation by derivation", classes
-            if len(classes) == 1:
-                c = classes[0][0].__name__
-                return {c: ret[c]}
-        return ret
+            print "     BEFORE disambiguation by derivation", classes
+            subclasses = filter(test_class, classes)
+            print "     AFTER disambiguation by derivation", subclasses
+            if subclasses:
+                classes = subclasses
+
+        validate = lambda c: cls.validate(scope, c, text, ret[c.__name__])
+        statements = map(validate, classes)
+        print "     statements", statements
+        if len(statements) == 1:
+            return statements[0]
+        else:
+            raise AmbiguousStatement(text, scope, statements)
+        return CppStatement(text, scope, [])
+
+    @classmethod
+    def validate(cls, scope, C, text, captures):
+        print "     validating", C, text, scope, captures
+        try:
+            tmp_scope = scope.copy()
+            C(text, tmp_scope, captures)
+        except InvalidStatement, ista:
+            return None
+        return C(text, scope, captures)
 
 
-class CppStatement(dict):
+class CppStatement(Scope):
     __metaclass__ = CppMeta
     recognize = 'semicolon semicolon'  # will never match :)
     tag = 'cpp'
     extra_contents = []
+    descriptors = {}
+    absorb = tuple()
+    absorb_post = tuple()
 
-    def __init__(self, text, parent):
+    def __init__(self, text, parent, payload):
+        Scope.__init__(self, parent)
         #print "init cpp statement", type(self), text
         self.text = text
-        self._scope = parent
         self.sub = []
         self.scope = parent
         for xc in self.extra_contents:
             setattr(self, xc, [])
-
-    def resolve(self, x):
-        if x in self:
-            return self[x]
-        if self.scope:
-            return self.scope.resolve(x)
-        return None
+        for k, v in self.descriptors.iteritems():
+            setattr(self, k, v)
+        for discard in starmap(self.process_payload, payload):
+            pass
 
     def itemize(self):
         return match(tokenize(self.text), self.recognize)
@@ -137,15 +192,47 @@ class CppStatement(dict):
     def validate(self, groups, scope):
         return True, None
 
+    def hook_template_type(self, toks):
+        print "| template_type", toks
+        pass
+
+    def hook_type(self, toks):
+        print "| type", toks
+        pass
+
+    def hook_template_param(self, toks):
+        print "| template_param", toks
+        pass
+
+    def hook_template_param_inst(self, toks):
+        print "| template_param inst", toks
+        pass
+
+    def hook_CALL(self, toks):
+        print "DETECTED A CALL!!", toks
+
+    def hook_UPDATE_TARGET(self, toks):
+        print "DETECTED AN UPDATE!!", toks
+
 
 class TypedefStatement(CppStatement):
     tag = 'typedef'
-    recognize = 'kw_typedef type_id type_id'
+    recognize = 'kw_typedef ((type_id template_inst?)? #id:type_id semicolon'
+
+    def hook_id(self, toks):
+        self.parent[toks] = 'type'
+
+
+class TypedefAnonStatement(TypedefStatement):
+    tag = 'typedef'
+    recognize = 'kw_typedef (kw_struct|kw_union) $'
+    absorb_post = ('symbol semicolon',)
 
 
 class ExprStatement(CppStatement):
     tag = 'expr'
-    recognize = 'expr semicolon'
+    recognize = 'expr (semicolon|close_paren)'
+    # close_paren if third statement inside for(;;)
 
 
 class IfStatement(CppStatement):
@@ -167,6 +254,7 @@ class DeleteStatement(CppStatement):
 class ForStatement(CppStatement):
     tag = 'for'
     recognize = '^kw_for'
+    absorb = ('expr', 'expr')
 
 
 class SwitchStatement(CppStatement):
@@ -222,31 +310,24 @@ class AssignmentStatement(ExprStatement):
 class VarDeclStatement(ExprStatement):
     tag = 'var'
     recognize = 'var_decl'
+    descriptors = {'name': None, 'type': None, 'initialization': None}
 
-    @classmethod
-    def validate(self, groups, scope):
-        vtype = (('symbol', 'int'),)
-        vinit = tuple()
-        for name, cts in groups:
-            print name, "->", cts
-            if name == 'type':
-                t = scope.resolve(cts)
-                #if t is None or t[0] != 'type':
-                #    return False, None
-                vtype = cts
-            elif name == 'id':
-                vid = cts
-            elif name == 'initialization':
-                vinit = cts
-        scope[vid] = ('var', vtype, vinit)
+    def hook_id(self, toks):
+        self.name = ''.join(imap(lambda x: x[1], toks))
+        self.scope[toks] = 'var'
 
-        return True, None
+    def hook_type(self, toks):
+        self.type = toks
+
+    def hook_initialization(self, toks):
+        self.initialization = toks
 
 
 class ClassDeclStatement(CppStatement):
     tag = 'class'
-    recognize = """type_spec*
-                   kw_class
+    recognize = """(kw_template template_spec)?
+                   type_spec*
+                   (kw_class|kw_struct)
                    type_id
                    (colon
                     scope
@@ -258,6 +339,34 @@ class ClassDeclStatement(CppStatement):
 class FuncDeclStatement(CppStatement):
     tag = 'func'
     recognize = '^func_decl'
+    descriptors = {'name': None}
+
+    def hook_id(self, toks):
+        print "got id capture", toks
+        if self.name:
+            # must be a param
+            self[toks] = 'var'
+            print self.name, "has param", toks
+        else:
+            self.name = ''.join(imap(lambda x: x[1], toks))
+            print "function", self.name
+
+    def hook_initialization(self, toks):
+        print "got initialization capture", toks
+
+    def hook_param_type(self, toks):
+        print "| param_type", toks
+        if self.resolve(toks) != 'type':
+            print "  param is invalid !"
+            raise InvalidStatement()
+        print "  param is valid !"
+
+    def hook_param_id(self, toks):
+        print "| param_id", toks
+        if self.resolve(toks):
+            print "  param is invalid !"
+            raise InvalidStatement()
+        print "  param is valid !"
 
 
 class ConstructorStatement(FuncDeclStatement):
@@ -270,9 +379,9 @@ class DestructorStatement(FuncDeclStatement):
     recognize = 'destructor_decl'
 
 
-class StructDeclStatement(CppStatement):
-    tag = 'struct'
-    recognize = 'type_spec* kw_struct'
+class UsingStatement(CppStatement):
+    tag = 'using'
+    recognize = 'kw_using kw_namespace? id'
 
 
 class ExternLinkage(CppStatement):

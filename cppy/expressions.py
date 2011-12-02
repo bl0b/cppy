@@ -20,7 +20,7 @@ expressions = {
 # IDENTIFIERS
 
 'id':
-    '(container namespace_member)* symbol',
+    'namespace_member? (container namespace_member)* symbol',
 
 'id_or_operator':
     '(container namespace_member)* _id_or_operator',
@@ -40,15 +40,16 @@ expressions = {
 
 'type_id':
     """(kw_template template_spec)?
+       (kw_class|kw_struct|kw_union)?
        container
        (namespace_member container)*
-       template_inst?
-       ref_deref*""",
+       template_inst?""",
 
 # TEMPLATES
 
 'template_param_spec':
-    '(kw_template|kw_typename|kw_class|kw_struct|kw_union)? type_id',
+    """(kw_template|kw_typename|kw_class|kw_struct|kw_union)?
+       type_id (assign_set type_id ref_deref*)?""",
 
 'template_spec':
     """open_angle
@@ -57,17 +58,19 @@ expressions = {
        )?
        close_angle""",
 
+'template_param_inst':
+    '#template_param_inst:(type_id ref_deref*|number)',
+
 'template_inst':
     """open_angle
-       ( (#template_param:(type_id|expr) comma)*
-         #template_param:(type_id|expr)
-       )?
-       close_angle""",
+       ( close_angle
+       | template_param_inst (comma template_param_inst)* close_angle
+       )""",
 
 # TYPECASTING
 
 'typecast':
-    'open_paren type_id close_paren',
+    'open_paren type_id ref_deref* close_paren',
 
 # LVALUES
 
@@ -98,21 +101,21 @@ expressions = {
     """ref_deref*
        #id:id
        (open_square close_square)?
-       ( call
-       | (open_square expr number? close_square)?
-         (assign_set #initialization:expr)?
+        #initialization:( call
+                        | (open_square expr number? close_square)?
+                        (assign_set expr)?
        )""",
 
 'param_decl':
-    """#type:type_id
+    """#param_type:type_id
        ref_deref*
-       #id:id
+       #param_id:id?
        (open_square number? close_square)?
        (open_square number? close_square)*
-       #initialisation:(assign_set expr)?""",
+       #initialization:(assign_set expr)?""",
 
 'param_decl_list':
-    '#param:param_decl (comma #param:param_decl)*',
+    'param_decl (comma param_decl)*',
 
 'constructor_decl':
     """(kw_template template_spec)?
@@ -124,6 +127,12 @@ expressions = {
         (comma type_id call)*
        )?""",
 
+'gcc_attribute':
+    """kw_gcc_attr
+       open_paren open_paren
+       symbol (open_paren string close_paren)?
+       close_paren close_paren""",
+
 'destructor_decl':
     """type_spec?
        (type_id namespace_member)?
@@ -134,6 +143,7 @@ expressions = {
 'func_decl':
     """#template_type:(kw_template template_spec)?
        #type:type_id
+       ref_deref*
        #id:id_or_operator
        template_inst?
        open_paren
@@ -142,7 +152,7 @@ expressions = {
        type_spec?""",  # final const if present
 
 'var_decl':
-    '#type:type_id core_decl (comma #decl:core_decl)* semicolon',
+    '#type:type_id ref_deref* core_decl (comma #decl:core_decl)* semicolon',
 
 # EXPRESSIONS
 
@@ -150,9 +160,9 @@ expressions = {
     'minus number | number | string | char',
 
 'new_inst':
-    """kw_new type_id star* (open_square expr close_square
-                         |open_paren expr_list close_paren
-                         )?""",
+    """kw_new type_id ref_deref* (open_square expr close_square
+                                 |open_paren expr_list close_paren
+                                 )?""",
 
 'expr1':
     """immed

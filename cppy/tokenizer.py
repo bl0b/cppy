@@ -16,6 +16,7 @@ keyword = [
     'kw_switch', 'kw_class', 'kw_while', 'kw_do', 'kw_for', 'kw_typedef',
     'kw_if', 'kw_else', 'kw_struct', 'kw_union', 'kw_return', 'kw_namespace',
     'kw_new', 'kw_delete', 'kw_operator', 'kw_typename', 'kw_template',
+    'kw_throw', 'kw_using',
 ]
 
 type_spec = [
@@ -33,7 +34,10 @@ token_pattern = r"""
 |(?P<kw_switch>\bswitch\b)
 |(?P<kw_class>\bclass\b)
 |(?P<kw_while>\bwhile\b)
+|(?P<kw_gcc_attr>\b__attribute__\b)
 |(?P<kw_do>\bdo\b)
+|(?P<kw_throw>\bthrow\b)
+|(?P<kw_using>\busing\b)
 |(?P<kw_namespace>\bnamespace\b)
 |(?P<kw_typedef>\btypedef\b)
 |(?P<kw_for>\bfor\b)
@@ -74,8 +78,8 @@ token_pattern = r"""
 |(?P<incdec>[+][+]|--)
 |(?P<string>"(?:\\["bntr]|[^\\"])*")
 |(?P<char>'(?:\\['bntr\\]|[^\\'])')
-|(?P<boolop>[|][|]|[&][&]|!)
-|(?P<bitop>(?<!\|)\|(?!\|) | (?<!\^)\^(?!\^))
+|(?P<boolop>(?:[|][|]|[&][&]|!)(?!=))
+|(?P<bitop>(?:(?<!\|)\|(?!\|) | (?<!\^)\^(?!\^))(?!=))
 |(?P<comp>==|!=|<=|>=)
 |(?P<addmoddiv>[%+/])
 |(?P<star>[*])

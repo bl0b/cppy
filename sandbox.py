@@ -1,9 +1,9 @@
 import cppy
 from itertools import ifilter
 
-c = cppy.Cpp(open('tests/demo.cpp'))
-ass = c.sub[-1].sub[-11]
 t = lambda x, e: cppy.match(cppy.tokenize(x), '#capture:(%s)' % e)
+c = cppy.Cpp(open('tests/demo.i'))
+ass = c.sub[-1].sub[-11]
 from cppy.cpp import counter as recog_stats
 from cppy.cpp import ambiguities as recog_ambiguities
 dump = cppy.dump_expression

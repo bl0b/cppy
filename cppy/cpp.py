@@ -1,11 +1,48 @@
 __all__ = ['Cpp']
 
 import re
+import os
 import sys
 from itertools import ifilter, imap
 import expressions
 from parser import tokenize, match, find, find_all, compile_expression
 from statements import *
+
+
+inc_path = [
+'/usr/include',
+'/usr/local/include',
+'/usr/include/c++/4.4/',
+'/usr/include/c++/4.4/x86_64-linux-gnu/',
+'/usr/include/linux/',
+'/usr/include/c++/4.4/tr1/',
+]
+
+already_included = set()
+
+
+def include(incname):
+    ex = os.path.exists
+    inc = filter(ex, (os.path.join(ip, incname) for ip in inc_path))
+    if len(inc):
+        i = inc[0]
+        if i not in already_included:
+            print "OPENING INCLUDE FILE", i
+            already_included.add(i)
+            return open(i)
+        return ''
+    print "COULDN'T FIND %s" % incname
+    return ''
+
+
+def incname(text):
+    l = text.rfind('<')
+    if l != -1:
+        r = text.rfind('>')
+    else:
+        l = text.find('"')
+        r = text.rfind('"')
+    return text[l + 1:r]
 
 
 def cpp_strip_slc(f):
@@ -15,8 +52,13 @@ def cpp_strip_slc(f):
              or f
     for line in reader:
         components = line.strip().split('//')
-        if len(components) and len(components[0]) and components[0][0] != '#':
-            yield components[0]
+        if len(components) and len(components[0]):
+            #if components[0][0] == '#' and 'include' in components[0]:
+            #    for inc in cpp_strip_slc(include(incname(components[0]))):
+            #        yield inc
+            #elif components[0][0] != '#':
+            if components[0][0] != '#':
+                yield components[0]
 
 
 multiline_comment = re.compile(r'/[*].*?[*]/')
@@ -55,7 +97,6 @@ class Cpp(Scope):
             'while': WhileStatement,
             'return': ReturnStatement,
             'class': ClassDeclStatement,
-            'struct': StructDeclStatement,
     }
     c_symbol = '[_a-zA-Z][a-zA-Z0-9:<>,]*'
     symbol = '(?:%s::)*%s' % (c_symbol, c_symbol)
@@ -72,9 +113,38 @@ class Cpp(Scope):
         Scope.__init__(self)
         lines = cpp_read(f)
         start = 0
+        for t in ('int', 'long int', 'unsigned long int', 'unsigned int',
+                  'float', 'double', 'char'):
+            self[tuple(tokenize(t))] = 'type'
         while start < len(lines):
-            statement, start = Cpp._parse(self, lines, start, 0, 0)
+            statement, start = Cpp.parse(self, lines, start, 0, 0)
             self.sub.append(statement)
+
+    @staticmethod
+    def parse(scope, lines, start, level, context_in_for):
+        print "line #%i" % start, lines[start]
+        if lines[start] == '{':
+            ret = CppStatement('<DATA>')
+            start -= 1
+        else:
+            ret = CppMeta.recognize(lines[start], scope)
+            print "      %s" % (' ' * len(str(start))), ret
+        if (start + 1) < len(lines) and lines[start + 1] == '{':
+            start += 2
+            ABSORB = 0
+            while start < len(lines) and lines[start] != '}':
+                statement, start = Cpp.parse(ret, lines, start,
+                                             level + 1, ABSORB)
+                print "      %s" % (' ' * len(str(start))), statement
+                if not ABSORB:
+                    ret.sub.append(statement)
+                    if statement.text.startswith('for'):
+                        ABSORB = 2
+                else:
+                    ret.sub[-1].text += statement.text
+                    ABSORB -= 1
+                    ret.sub[-1].sub.extend(statement.sub)
+        return ret, start + 1
 
     @staticmethod
     def _parse(scope, lines, start, level, context_in_for):
@@ -103,18 +173,18 @@ class Cpp(Scope):
                 ret = CppStatement(lines[start], scope)
         if (start + 1) < len(lines) and lines[start + 1] == '{':
             start += 2
-            IN_FOR = 0
+            ABSORB = 0
             print "in", ret
             while start < len(lines) and lines[start] != '}':
                 statement, start = Cpp._parse(ret, lines, start,
-                                              level + 1, IN_FOR)
-                if not IN_FOR:
+                                              level + 1, ABSORB)
+                if not ABSORB:
                     ret.sub.append(statement)
                     if statement.text.startswith('for'):
-                        IN_FOR = 2
+                        ABSORB = 2
                 else:
                     ret.sub[-1].text += statement.text
-                    IN_FOR -= 1
+                    ABSORB -= 1
                     ret.sub[-1].sub.extend(statement.sub)
         # TESTING !
         #print >> sys.stderr, "EXPERIMENTAL RECOGNITION", \
@@ -180,7 +250,7 @@ class Cpp(Scope):
             ret = scope.sub.pop()
             ret.whilecond.append(statement)
             return ret
-        if type(statement) in (ClassDeclStatement, StructDeclStatement):
+        if type(statement) is ClassDeclStatement:
             scopes = ('public', 'private', 'protected')
 
             def strip(scope, text):
