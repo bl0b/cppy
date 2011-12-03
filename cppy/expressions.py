@@ -36,7 +36,7 @@ expressions = {
        )""",
 
 'container':
-    'type_spec* symbol template_inst?',
+    'symbol template_inst?',
 
 'type_id':
     """(kw_template template_spec)?
@@ -70,7 +70,7 @@ expressions = {
 # TYPECASTING
 
 'typecast':
-    'open_paren type_id ref_deref* close_paren',
+    'open_paren (ref_deref|type_spec)* type_id ref_deref* close_paren',
 
 # LVALUES
 
@@ -78,7 +78,7 @@ expressions = {
     'open_square expr close_square | call',
 
 'raw_lvalue':
-    'id (access lvalue|anon_lvalue_access)*',
+    '#must_be_var:id (access lvalue|anon_lvalue_access)*',
 
 'call':
     'open_paren expr_list? close_paren',
@@ -107,21 +107,24 @@ expressions = {
        )""",
 
 'param_decl':
-    """#param_type:type_id
+    """type_spec*
+       #param_type:type_id
        ref_deref*
+       kw_restrict?
        #param_id:id?
        (open_square number? close_square)?
        (open_square number? close_square)*
        #initialization:(assign_set expr)?""",
 
 'param_decl_list':
-    'param_decl (comma param_decl)*',
+    'param_decl (comma param_decl)* (comma ellipsis)?',
+    # ellipsis is legal only after a regular parameter (see va_list)
 
 'constructor_decl':
     """(kw_template template_spec)?
        type_id
        template_inst?
-       open_paren param_decl_list? close_paren
+       open_paren (kw_void|param_decl_list)? close_paren
        (colon
         type_id call
         (comma type_id call)*
@@ -141,18 +144,26 @@ expressions = {
        open_paren close_paren""",
 
 'func_decl':
-    """#template_type:(kw_template template_spec)?
+    """kw_extension?
+       (type_spec string)?
+       #template_type:(kw_template template_spec)?
+       type_spec*
        #type:type_id
        ref_deref*
        #id:id_or_operator
        template_inst?
        open_paren
-       param_decl_list?
+       (kw_void|param_decl_list)?
        close_paren
        type_spec?""",  # final const if present
 
 'var_decl':
-    '#type:type_id ref_deref* core_decl (comma #decl:core_decl)* semicolon',
+    """type_spec*
+       #must_be_type:type_id
+       ref_deref*
+       core_decl
+       (comma #decl:core_decl)*
+       semicolon""",
 
 # EXPRESSIONS
 

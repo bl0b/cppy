@@ -16,12 +16,12 @@ keyword = [
     'kw_switch', 'kw_class', 'kw_while', 'kw_do', 'kw_for', 'kw_typedef',
     'kw_if', 'kw_else', 'kw_struct', 'kw_union', 'kw_return', 'kw_namespace',
     'kw_new', 'kw_delete', 'kw_operator', 'kw_typename', 'kw_template',
-    'kw_throw', 'kw_using',
+    'kw_throw', 'kw_using', 'kw_restrict', 'kw_extension', 'kw_void',
 ]
 
 type_spec = [
-    'typename', 'const', 'static', 'register', 'volatile', 'virtual',
-    'extern', 'long', 'short', 'unsigned', 'signed', 'friend',
+    'typename', 'const', '__const', 'static', 'register', 'volatile',
+    'virtual', 'extern', 'long', 'short', 'unsigned', 'signed', 'friend',
 ]
 
 scope = ['public', 'private', 'protected']
@@ -31,11 +31,15 @@ sym_assert = ''.join('(?!(?P=%s))' % i
 
 token_pattern = r"""
 (?P<number>""" + number + r""")
+|(?P<ellipsis>\.\.\.)
 |(?P<kw_switch>\bswitch\b)
 |(?P<kw_class>\bclass\b)
 |(?P<kw_while>\bwhile\b)
 |(?P<kw_gcc_attr>\b__attribute__\b)
 |(?P<kw_do>\bdo\b)
+|(?P<kw_void>\bvoid\b)
+|(?P<kw_extension>\b__extension__\b)
+|(?P<kw_restrict>\b__restrict\b)
 |(?P<kw_throw>\bthrow\b)
 |(?P<kw_using>\busing\b)
 |(?P<kw_namespace>\bnamespace\b)

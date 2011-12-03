@@ -113,28 +113,41 @@ class Cpp(Scope):
         Scope.__init__(self)
         lines = cpp_read(f)
         start = 0
-        for t in ('int', 'long int', 'unsigned long int', 'unsigned int',
-                  'float', 'double', 'char'):
+        for t in ('int', 'float', 'double', 'char', 'wchar_t'):
             self[tuple(tokenize(t))] = 'type'
+        print self
         while start < len(lines):
-            statement, start = Cpp.parse(self, lines, start, 0, 0)
+            statement, start = Cpp.parse(self, lines, start, 0)
             self.sub.append(statement)
 
     @staticmethod
-    def parse(scope, lines, start, level, context_in_for):
-        print "line #%i" % start, lines[start]
+    def parse(scope, lines, start, level):
+        print level, "line #%i" % start, lines[start]
         if lines[start] == '{':
-            ret = CppStatement('<DATA>')
+            ret = CppStatement('<DATA>', scope, [])
             start -= 1
         else:
             ret = CppMeta.recognize(lines[start], scope)
             print "      %s" % (' ' * len(str(start))), ret
+        if ret is None:
+            raise Exception("Couldn't parse < %s >" % lines[start])
+        for abs_expr in ret.absorb:
+            start += 1
+            print level, "ABSORB", abs_expr, "line #%i" % start, lines[start]
+            ok, mstart, mend, groups = match(tokenize(lines[start]), abs_expr)
+            if not ok:
+                raise Exception("parse error")
+            print repr(ret.text), repr(lines[start])
+            ret.text += lines[start]
+            print repr(ret.text)
+            for g in groups:
+                ret.process_payload(*g)
         if (start + 1) < len(lines) and lines[start + 1] == '{':
             start += 2
             ABSORB = 0
             while start < len(lines) and lines[start] != '}':
                 statement, start = Cpp.parse(ret, lines, start,
-                                             level + 1, ABSORB)
+                                             level + 1)
                 print "      %s" % (' ' * len(str(start))), statement
                 if not ABSORB:
                     ret.sub.append(statement)
@@ -144,6 +157,16 @@ class Cpp(Scope):
                     ret.sub[-1].text += statement.text
                     ABSORB -= 1
                     ret.sub[-1].sub.extend(statement.sub)
+            for abspo in ret.absorb_post:
+                start += 1
+                print "ABSORB POST", abspo, "line #%i" % start, lines[start]
+                ok, mstart, mend, groups = match(tokenize(lines[start]), abspo)
+                if not ok:
+                    raise Exception("parse error")
+                ret.text += lines[start]
+                for g in groups:
+                    ret.process_payload(*g)
+        ret.commit()
         return ret, start + 1
 
     @staticmethod
