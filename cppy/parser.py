@@ -14,6 +14,39 @@ arity = {(0, 1): '?', (0, ARITY_N): '*', (1, ARITY_N): '+', (1, 1): ''}
 detail_dump_match = False
 
 
+class Ast(object):
+
+    def __init__(self, name, tokens, children):
+        self.name = name
+        self.tokens = tokens
+        self.children = children
+
+    #def __str__(self):
+    #    build = [self.name, ":("]
+    #    build.append(', '.join(imap(str, self.children)))
+    #    build.append(")")
+    #    return ''.join(build)
+
+    def __repr__(self):
+        build = [self.name, ":["]
+        build.append(' '.join(imap(str, self.tokens)))
+        build.append("]:(")
+        build.append(', '.join(imap(repr, self.children)))
+        build.append(")")
+        return ''.join(build)
+
+    __str__ = __repr__
+
+    def dump(self, level=0):
+        prefix = "   " * level
+        print prefix, "+", self.name
+        print prefix, ":", ' '.join(imap(str, self.tokens))
+        if self.children:
+            print prefix, "`--+"
+            for c in self.children:
+                c.dump(level + 1)
+
+
 def str_pub(e):
     return e.publish and '#%s:' % e.publish or ''
 
@@ -31,13 +64,15 @@ def make_publisher(uniq=False):
     if uniq:
         groups = set()
 
-        def _pub(n, e):
-            groups.add((n, make_tuple(e)))
+        def _pub(n, e, s):
+            groups.add(Ast(n, e, s))
+            #groups.add((n, make_tuple(e), make_tuple(s)))
     else:
         groups = []
 
-        def _pub(n, e):
-            groups.append((n, make_tuple(e)))
+        def _pub(n, e, s):
+            groups.append(Ast(n, e, s))
+            #groups.append((n, make_tuple(e), make_tuple(s)))
     return _pub, groups
 
 
@@ -59,7 +94,7 @@ bytes.com/topic/python/answers/32098-my-experiences-subclassing-string"""
         while i < len(l) and (i - i0) < self.amax and self == l[i][0]:
             i += 1
         ok = self.amin <= (i - i0) <= self.amax
-        ok and self.publish and publisher(self.publish, l[i0:i])
+        ok and self.publish and publisher(self.publish, l[i0:i], tuple())
         if detail_dump_match:
             print "matched", (i - i0), (self.amin, self.amax), self
         return ok, i
@@ -112,13 +147,21 @@ class Expr(list):
                     break
             if ok:
                 count += 1
-                list(starmap(pub, subgrps))
+                for g in subgrps:
+                    pub(g.name, g.tokens, g.children)
+                #list(starmap(pub, subgrps))
         self.recursion_watchdog.pop()
         if ok:
             i1 = i
         ok = self.amin <= count <= self.amax
-        ok and self.publish and publisher(self.publish, l[i0:i1])
-        ok and groups and list(starmap(publisher, groups))
+        if ok:
+            if self.publish:
+                publisher(self.publish, l[i0:i1], groups)
+            else:
+                for g in groups:
+                    publisher(g.name, g.tokens, g.children)
+        #ok and self.publish and publisher(self.publish, l[i0:i1], groups)
+        #ok and groups and list(starmap(publisher, groups))
         if detail_dump_match:
             print "list", repr(self), "matched", count, (self.amin, self.amax)
         return ok, i1
@@ -163,26 +206,36 @@ class AltExpr(Expr):
             return ok, iprime, sgrp
         return mk_match
 
-    def match(self, l, i, publisher=lambda name, tokens: None):
+    def match(self, l, i, publisher=lambda name, tokens, sub: None):
         if not self:
             return False, i
         i0 = i
         count = 0
         ok = True
-        tmp_groups = zip(self, (make_publisher() for x in self))
         subpub, groups = make_publisher()
         while ok and i < len(l) and count < self.amax:
             matcher = self.matcher(l, i)
+            tmp_groups = zip(self, (make_publisher() for x in self))
             ok, i, g = max(starmap(matcher, tmp_groups),
                            key=lambda (ok, i, g): ok and i or 0)
             if not ok:
                 break
-            ok and self.publish and subpub(self.publish, l[i0:i])
-            ok and g and list(starmap(subpub, g))
+            #ok and self.publish and subpub(self.publish, l[i0:i])
+            if ok:
+                for x in g:
+                    subpub(x.name, x.tokens, x.children)
+            #ok and g and list(starmap(subpub, g))
             count += 1
 
         ok = self.amin <= count <= self.amax
-        ok and groups and list(starmap(publisher, groups))
+        if ok:
+            if self.publish:
+                publisher(self.publish, l[i0:i], groups)
+            else:
+                for g in groups:
+                    publisher(g.name, g.tokens, g.children)
+        #ok and self.publish and publisher(self.publish, l[i0:i])
+        #ok and groups and list(starmap(publisher, groups))
         if detail_dump_match:
             print "alt matched", count, (self.amin, self.amax), self
         return ok, i
@@ -216,8 +269,14 @@ class ProxyExpr(TokenExpr):
             ok, i = ne.match(l, i, pub)
             count += int(ok)
         ok = self.amin <= count <= self.amax
-        ok and self.publish and publisher(self.publish, l[i0:i])
-        ok and g and map(lambda grp: publisher(*grp), g)
+        if ok:
+            if self.publish:
+                publisher(self.publish, l[i0:i], g)
+            else:
+                for grp in g:
+                    publisher(grp.name, grp.tokens, grp.children)
+        #ok and self.publish and publisher(self.publish, l[i0:i])
+        #ok and g and map(lambda grp: publisher(*grp), g)
         return ok, i
 
         #if self.cache is not ne:
@@ -384,7 +443,7 @@ def sub_compile_expr(tokens, i, inner=False):
 def clean_expr(expr):
     if type(expr) not in (Expr, AltExpr):
         return expr
-    if len(expr) != 1:
+    if len(expr) != 1 or expr.publish is not None:
         for i in xrange(len(expr)):
             expr[i] = clean_expr(expr[i])
         return expr

@@ -78,7 +78,7 @@ expressions = {
     'open_square expr close_square | call',
 
 'raw_lvalue':
-    '#must_be_var:id (access lvalue|anon_lvalue_access)*',
+    'id (access lvalue|anon_lvalue_access)*',
 
 'call':
     'open_paren expr_list? close_paren',
@@ -101,28 +101,28 @@ expressions = {
     """ref_deref*
        #id:id
        (open_square close_square)?
-        #initialization:( call
-                        | (open_square expr number? close_square)?
-                        (assign_set expr)?
+       ( call
+       | (open_square expr number? close_square)?
+         (assign_set #initialization:expr)?
        )""",
 
 'param_decl':
     """type_spec*
-       #param_type:type_id
+       #type:type_id
        ref_deref*
        kw_restrict?
-       #param_id:id?
+       #id:id?
        (open_square number? close_square)?
        (open_square number? close_square)*
        #initialization:(assign_set expr)?""",
 
 'param_decl_list':
-    'param_decl (comma param_decl)* (comma ellipsis)?',
+    '#param:param_decl (comma #param:param_decl)* (comma ellipsis)?',
     # ellipsis is legal only after a regular parameter (see va_list)
 
 'constructor_decl':
     """(kw_template template_spec)?
-       type_id
+       #id:type_id
        template_inst?
        open_paren (kw_void|param_decl_list)? close_paren
        (colon
@@ -138,9 +138,7 @@ expressions = {
 
 'destructor_decl':
     """type_spec?
-       (type_id namespace_member)?
-       tilde
-       symbol
+       #id:((type_id namespace_member)? tilde symbol)
        open_paren close_paren""",
 
 'func_decl':
@@ -159,7 +157,7 @@ expressions = {
 
 'var_decl':
     """type_spec*
-       #must_be_type:type_id
+       #type:type_id
        ref_deref*
        core_decl
        (comma #decl:core_decl)*

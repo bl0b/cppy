@@ -7,6 +7,8 @@ from itertools import ifilter, imap
 import expressions
 from parser import tokenize, match, find, find_all, compile_expression
 from statements import *
+#from namespace import Namespace
+import namespace
 
 
 inc_path = [
@@ -85,7 +87,7 @@ def cpp_read(f):
     return filter(lambda s: s not in ('', ';', ','), lines)
 
 
-class Cpp(Scope):
+class Cpp(object):
     "Usable representation of a C++ file. Tries to be as accurate as possible."
     keywords = {
             'switch': SwitchStatement,
@@ -110,15 +112,24 @@ class Cpp(Scope):
     var_spec = '(?:(?:volatile|static|register)*)'
 
     def __init__(self, f):
-        Scope.__init__(self)
+        #Scope.__init__(self)
+        self.parent = None
         lines = cpp_read(f)
         start = 0
+        self.sub = []
+        #self.root = Namespace()
+        self.root = namespace.root()
+        #self.root.enter()
         for t in ('int', 'float', 'double', 'char', 'wchar_t'):
-            self[tuple(tokenize(t))] = 'type'
+            #self[tuple(tokenize(t))] = 'type'
+            #Namespace.current().add_type(('symbol', t))
+            namespace.add_type(('symbol', t))
         print self
+        print str(namespace.current())
         while start < len(lines):
             statement, start = Cpp.parse(self, lines, start, 0)
             self.sub.append(statement)
+        namespace.leave(self.root)
 
     @staticmethod
     def parse(scope, lines, start, level):
@@ -128,44 +139,38 @@ class Cpp(Scope):
             start -= 1
         else:
             ret = CppMeta.recognize(lines[start], scope)
-            print "      %s" % (' ' * len(str(start))), ret
+            #print "      %s" % (' ' * len(str(start))), ret
         if ret is None:
             raise Exception("Couldn't parse < %s >" % lines[start])
         for abs_expr in ret.absorb:
             start += 1
-            print level, "ABSORB", abs_expr, "line #%i" % start, lines[start]
+            #print level, "ABSORB", abs_expr, "line #%i" % start, lines[start]
             ok, mstart, mend, groups = match(tokenize(lines[start]), abs_expr)
             if not ok:
                 raise Exception("parse error")
-            print repr(ret.text), repr(lines[start])
+            #print repr(ret.text), repr(lines[start])
             ret.text += lines[start]
-            print repr(ret.text)
+            #print repr(ret.text)
             for g in groups:
-                ret.process_payload(*g)
+                ret.process_payload(g)
         if (start + 1) < len(lines) and lines[start + 1] == '{':
+            ret.pre_sub()
             start += 2
-            ABSORB = 0
             while start < len(lines) and lines[start] != '}':
                 statement, start = Cpp.parse(ret, lines, start,
                                              level + 1)
-                print "      %s" % (' ' * len(str(start))), statement
-                if not ABSORB:
-                    ret.sub.append(statement)
-                    if statement.text.startswith('for'):
-                        ABSORB = 2
-                else:
-                    ret.sub[-1].text += statement.text
-                    ABSORB -= 1
-                    ret.sub[-1].sub.extend(statement.sub)
+                ret.sub.append(statement)
             for abspo in ret.absorb_post:
                 start += 1
-                print "ABSORB POST", abspo, "line #%i" % start, lines[start]
+                #print "ABSORB POST", abspo, "line #%i" % start, lines[start]
                 ok, mstart, mend, groups = match(tokenize(lines[start]), abspo)
                 if not ok:
                     raise Exception("parse error")
                 ret.text += lines[start]
                 for g in groups:
-                    ret.process_payload(*g)
+                    g.dump()
+                    ret.process_payload(g)
+            ret.post_sub()
         ret.commit()
         return ret, start + 1
 
@@ -349,7 +354,7 @@ class Cpp(Scope):
         return dict.__str__(self) + str(self.sub)
 
     def __repr__(self):
-        return dict.__repr__(self) + repr(self.sub)
+        return repr(self.root) + repr(self.sub)
 
 #DELETEME!
 counter = {}
