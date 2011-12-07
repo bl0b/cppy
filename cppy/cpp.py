@@ -9,6 +9,7 @@ from parser import tokenize, match, find, find_all, compile_expression
 from statements import *
 #from namespace import Namespace
 import namespace
+from exceptions import *
 
 
 inc_path = [
@@ -81,8 +82,13 @@ reformat = {
 
 def cpp_read(f):
     nocomment = cpp_strip_mlc(f)
+    if nocomment[-1] in reformat:
+        preserve = nocomment[-1]
+    else:
+        preserve = ''
     for match, replace in reformat.iteritems():
         nocomment = replace.join(ifilter(lambda x: x, nocomment.split(match)))
+    nocomment += preserve
     lines = imap(str.strip, nocomment.splitlines())
     return filter(lambda s: s not in ('', ';', ','), lines)
 
@@ -123,9 +129,9 @@ class Cpp(object):
         for t in ('int', 'float', 'double', 'char', 'wchar_t'):
             #self[tuple(tokenize(t))] = 'type'
             #Namespace.current().add_type(('symbol', t))
-            namespace.add_type(('symbol', t))
-        print self
-        print str(namespace.current())
+            namespace.add_type((('symbol', t),))
+        #print self
+        #print str(namespace.current())
         while start < len(lines):
             statement, start = Cpp.parse(self, lines, start, 0)
             self.sub.append(statement)
@@ -133,7 +139,7 @@ class Cpp(object):
 
     @staticmethod
     def parse(scope, lines, start, level):
-        print level, "line #%i" % start, lines[start]
+        #print level, "line #%i" % start, lines[start]
         if lines[start] == '{':
             ret = CppStatement('<DATA>', scope, [])
             start -= 1
@@ -144,10 +150,11 @@ class Cpp(object):
             raise Exception("Couldn't parse < %s >" % lines[start])
         for abs_expr in ret.absorb:
             start += 1
-            #print level, "ABSORB", abs_expr, "line #%i" % start, lines[start]
+            #print level, "ABSORB", abs_expr
+            #print level, "-line #%i" % start, lines[start]
             ok, mstart, mend, groups = match(tokenize(lines[start]), abs_expr)
             if not ok:
-                raise Exception("parse error")
+                raise InvalidStatement(lines[start])
             #print repr(ret.text), repr(lines[start])
             ret.text += lines[start]
             #print repr(ret.text)
@@ -162,10 +169,11 @@ class Cpp(object):
                 ret.sub.append(statement)
             for abspo in ret.absorb_post:
                 start += 1
-                #print "ABSORB POST", abspo, "line #%i" % start, lines[start]
+                #print level, "ABSORB POST", abspo
+                #print level, "-line #%i" % start, lines[start]
                 ok, mstart, mend, groups = match(tokenize(lines[start]), abspo)
                 if not ok:
-                    raise Exception("parse error")
+                    raise InvalidStatement(lines[start])
                 ret.text += lines[start]
                 for g in groups:
                     g.dump()

@@ -22,12 +22,11 @@ expressions = {
 'id':
     'namespace_member? (container namespace_member)* symbol',
 
-'id_or_operator':
-    '(container namespace_member)* _id_or_operator',
+#'id':
+#    '(container namespace_member)* symbol',
 
-'_id_or_operator':
-    """symbol
-     | kw_operator
+'operator_id':
+    """kw_operator
        ( open_paren close_paren
        | open_square close_square
        | ref_deref
@@ -78,7 +77,7 @@ expressions = {
     'open_square expr close_square | call',
 
 'raw_lvalue':
-    'id (access lvalue|anon_lvalue_access)*',
+    'id #ACCESS:(access lvalue|anon_lvalue_access)*',
 
 'call':
     'open_paren expr_list? close_paren',
@@ -125,10 +124,10 @@ expressions = {
        #id:type_id
        template_inst?
        open_paren (kw_void|param_decl_list)? close_paren
-       (colon
-        type_id call
-        (comma type_id call)*
-       )?""",
+       #CTOR:(colon
+              #CHECK_EXISTS:id call
+              (comma #CHECK_EXISTS:id call)*
+             )?""",
 
 'gcc_attribute':
     """kw_gcc_attr
@@ -144,11 +143,16 @@ expressions = {
 'func_decl':
     """kw_extension?
        (type_spec string)?
-       #template_type:(kw_template template_spec)?
-       type_spec*
-       #type:type_id
-       ref_deref*
-       #id:id_or_operator
+       ((kw_inline? #type:kw_void
+        |#template_type:(kw_template template_spec)?
+         kw_inline?
+         type_spec*
+         #type:type_id
+         ref_deref*
+        )
+        #id:(id|operator_id)
+       |kw_inline? #id_and_type:(kw_operator symbol)
+       )
        template_inst?
        open_paren
        (kw_void|param_decl_list)?
@@ -175,9 +179,9 @@ expressions = {
 
 'expr1':
     """immed
-     | lvalue
-     | incdec #UPDATE_TARGET:lvalue
-     | #UPDATE_TARGET:lvalue incdec
+     | #READ:lvalue
+     | incdec #UPDATE:lvalue
+     | #UPDATE:lvalue incdec
      | open_paren expr close_paren (open_square expr close_square)*
      | typecast+ expr1
      | #CREATION:new_inst
@@ -198,9 +202,9 @@ expressions = {
 # STATEMENTS
 
 'assignment':
-    """#lvalue:lvalue
-       (#set:assign_set|#update:assign_update)
-       #rvalue:expr semicolon""",
+    """#WRITE:lvalue assign_set #rvalue:expr semicolon
+     | #UPDATE:lvalue assign_update #rvalue:expr semicolon
+    """,
 }
 
 # Predeclare expressions to handle circular dependencies cleanly

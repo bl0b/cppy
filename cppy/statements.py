@@ -5,12 +5,13 @@ __all__ = [
 'FuncDeclStatement',  # 'Scope',
 ]
 
-from parser import compile_expression, match, tokenize
+from parser import compile_expression, match, tokenize, Ast
 import sys
 from itertools import chain, imap, starmap
 #from namespace import Namespace
 import namespace
 from namespace import Namespace
+from exceptions import *
 
 anon_counter = 0
 
@@ -21,33 +22,6 @@ def anon():
     return 'anonymous_' + str(anon_counter)
 
 
-class CppException(Exception):
-    pass
-
-
-class UnhandledCapture(CppException):
-
-    def __init__(self, name, toks):
-        CppException.__init__(self, "Capture <%s> has no handler!" % name)
-        self.capture_name = name
-        self.capture_tokens = toks
-        toks.dump()
-
-
-class AmbiguousStatement(CppException):
-
-    def __init__(self, text, scope, classes):
-        CppException.__init__(self, "Ambiguous statement: < %s > %s" % (
-                                    text, str(classes)))
-        self.text = text
-        self.scope = scope
-        self.classes = classes
-
-
-class InvalidStatement(CppException):
-    pass
-
-
 class Scope(dict):
 
     def __init__(self, parent=None):
@@ -56,27 +30,10 @@ class Scope(dict):
         self.parent = parent
 
     def resolve(self, x):
-        #return Namespace.current().resolve(x)
         return namespace.resolve(x)
-        ##print "resolving", x, "in", Scope.__repr__(self)
-        #if x in self:
-        #    #print "found!"
-        #    return self[x]
-        #if self.parent is not None:
-        #    return self.parent.resolve(x)
-        ##print "not found."
-        #return Namespace.current().resolve(x)
-
-    #__getitem__ = resolve
-
-    #def copy_scope(self):
-        #ret = Scope(self.parent)
-        #ret.update(self)
-        #ret.sub = list(self.sub)
-        #return ret
 
     def dump_scope(self):
-        print dict(self)
+        #print dict(self)
         self.parent and self.parent.dump_scope()
 
     def __repr__(self):
@@ -97,12 +54,6 @@ class CppMeta(type):
                     dic['recognize']
                     #"#%s:(%s)" % (name, dic['recognize'])
         type.__init__(cls, name, bases, dic)
-
-    #def pre_sub(self):
-    #    pass
-
-    #def post_sub(self):
-    #    pass
 
     @classmethod
     def __recog(cls, tokens):
@@ -139,6 +90,10 @@ class CppMeta(type):
             if subclasses:
                 classes = subclasses
 
+        if len(classes) != 1:
+            print "ambiguity:", text
+            print "     classes", classes
+
         validate = lambda c: cls.validate(scope, c, text, ret[c.__name__])
         statements = filter(lambda x: x is not None, imap(validate, classes))
         #print "     statements", statements
@@ -150,21 +105,14 @@ class CppMeta(type):
 
     @classmethod
     def validate(cls, scope, C, text, captures):
-        print "     validating", C, text, scope, captures
+        #print "     validating", C, text, scope, captures
         try:
-            #tmp_scope = scope.copy_scope()
-            #Namespace.current().enter_subscope()
-            #tmp_scope = Namespace.current().symbols
-            tmp_scope = namespace.enter_scope()
-            #print "tmp_scope"
-            #tmp_scope.dump_scope()
-            C(text, tmp_scope, captures)
+            tmp = namespace.enter(anon())
+            C(text, scope, captures)
         except InvalidStatement, ista:
-            #Namespace.current().leave_subscope()
-            namespace.leave_scope()
+            namespace.delete(tmp)
             return None
-        namespace.leave_scope()
-        #Namespace.current().leave_subscope()
+        namespace.delete(tmp)
         return C(text, scope, captures)
 
 
@@ -178,14 +126,11 @@ class CppStatement(object):
     absorb_post = tuple()
 
     def __init__(self, text, parent, payload):
-        #Scope.__init__(self, parent)
-        print "init cpp statement", type(self), text
-        print "         payload", payload
+        #print "init cpp statement", type(self), text
+        #print "         payload", payload
         self.parent = parent
         self.text = text
         self.sub = []
-        #print "scope"
-        #self.dump_scope()
         for xc in self.extra_contents:
             setattr(self, xc, [])
         for k, v in self.descriptors.iteritems():
@@ -194,7 +139,6 @@ class CppStatement(object):
             pass
 
     def resolve(self, ast):
-        #return Namespace.current().resolve(ast.tokens)
         return namespace.resolve(ast.tokens)
 
     def commit(self):
@@ -237,13 +181,13 @@ class CppStatement(object):
                 yield x
 
     def process_payload(self, ast):
-        print ast
+        #print ast
         hook = 'hook_' + ast.name
-        print "DEBUG process_payload", hook, ast
+        #print "DEBUG process_payload", hook, ast
         if hook in dir(self):
             return getattr(self, hook)(ast)
-        elif self.parent:
-            return self.parent.process_payload(ast)
+        #elif self.parent:
+        #    return self.parent.process_payload(ast)
         else:
             raise UnhandledCapture(ast.name, ast)
 
@@ -263,96 +207,104 @@ class CppStatement(object):
         #print "| template_param inst", toks
         pass
 
+    def hook_rvalue(self, ast):
+        for x in ast.children:
+            self.process_payload(x)
+
     def hook_CALL(self, toks):
         print "DETECTED A CALL!!", toks
 
-    def hook_UPDATE_TARGET(self, toks):
+    def hook_UPDATE(self, toks):
         print "DETECTED AN UPDATE!!", toks
 
-    def hook_must_be_var(self, toks):
-        if self.resolve(toks) != 'var':
-            print "Couldn't resolve", toks
-            ns = namespace.current()
-            while ns.parent:
-                ns = ns.parent
-            print str(ns)
-            raise InvalidStatement()
+    def hook_READ(self, ast):
+        x = namespace.resolve(ast.tokens)
+        if x is None or x[0] != 'var':
+            raise InvalidStatement(self.text)
+
+    def hook_WRITE(self, ast):
+        x = namespace.resolve(ast.tokens)
+        if x is None or x[0] != 'var':
+            raise InvalidStatement(self.text)
+
+    def hook_CHECK_EXISTS(self, ast):
+        x = namespace.resolve(ast.tokens)
+        if x is None:
+            #print "COULDN'T RESOLVE", ast.tokens
+            raise InvalidStatement(self.text)
 
 
 class TypedefStatement(CppStatement):
     tag = 'typedef'
+    descriptors = {'tid': None, 'key': None}
     recognize = """kw_typedef
                    type_spec*
-                   ( (type_id template_inst?)?
-                     ref_deref*
-                     #id:type_id
-                   | #id:type_id
-                   )
+                   (kw_struct|kw_union|kw_class)?
+                   (#tid:type_id ref_deref* #id:type_id
+                   |ref_deref* #id:type_id)
                    semicolon"""
 
-    def hook_id(self, ast):
-        print "REGISTERING TYPE", ast
-        #self.parent[toks] = 'type'
-        #Namespace.current().add_type(ast.tokens)
-        namespace.add_type(ast.tokens)
-
-
-class TypedefAnonStatement(TypedefStatement):
-    tag = 'typedef'
-    recognize = 'kw_typedef type_spec* #key:(kw_class|kw_struct|kw_union) $'
-    absorb_post = ('ref_deref* #id:symbol semicolon',)
-
-    def pre_sub(self):
-        self.ns = Namespace(anon(), Namespace.current())
-        #self.ns = namespace.enter(anon(), key=self.key)
-        self.ns.enter()
+    def hook_tid(self, ast):
+        self.tid = ast.tokens
 
     def hook_key(self, ast):
         self.key = ast.tokens[0][1]
 
     def hook_id(self, ast):
-        print "PRE SUB TypedefAnonStatement"
-        self.ns_name = ast.tokens[0][1]
+        #print "REGISTERING TYPE", ast
+        self.name = ast.tokens
 
-    def post_sub(self):
-        print "POST SUB TypedefAnonStatement"
-        namespace.leave(self.ns)
-        #ns = Namespace(self.ns_name, Namespace.current(), key=self.key)
-        ns = namespace.enter(self.ns_name)
-        ns.assign(self.ns)
-        ns.key = self.key
-        self.ns = ns
-        namespace.add_type((('symbol', self.ns_name),))
-        #Namespace.current().add_namespace(ns)
+    def commit(self):
+        if self.tid is None:
+            self.tid = (('symbol', 'int'),)
+        if self.key is not None:
+            namespace.add_type(self.name, type=self.tid, key=self.key)
+        else:
+            namespace.add_type(self.name, type=self.tid)
 
 
 class TypedefStructStatement(TypedefStatement):
     tag = 'typedef'
     recognize = """kw_typedef
-                   type_spec*
-                   #key:(kw_class|kw_struct|kw_union)
-                   #id:symbol
+                   #key:(kw_struct|kw_union|kw_class)
+                   #tid:type_id?
                    $"""
-    absorb_post = ('ref_deref* #id:symbol semicolon',)
+    absorb_post = ('ref_deref* #id:symbol ($|semicolon)',)
+    descriptors = {'name': None, 'tid': None, 'id': None}
+
+    def hook_tid(self, ast):
+        self.tid = ast.tokens
+        #print "DEBUG TypedefStructStatement", ast.tokens
+        if not self.tid:
+            self.tid_name = anon()
+            self.container = namespace.current()
+        else:
+            c = namespace.current()
+            self.container, self.tid_name = c.interpret_tokens(self.tid)
+        self.tid = (('symbol', self.tid_name),)
+        #print "DBG TypedefStructStatement", self.tid, self.tid_name, self.tid
 
     def pre_sub(self):
-        print "PRE SUB TypedefStructStatement"
-        #self.ns = Namespace(self.ns_name, Namespace.current(), key=self.key)
-        self.ns = namespace.enter(self.ns_name, key=self.key)
+        #print "PRE SUB TypedefStructStatement", self.key, self.tid_name,
+        #print self.tid
+        self.ns = namespace.enter(self.tid_name, key=self.key)
         #Namespace.current().add_namespace(self.ns)
         #self.ns.enter()
-
-    def hook_key(self, ast):
-        self.key = ast.tokens[0][1]
-
-    def hook_id(self, ast):
-        self.ns_name = ast.tokens[0][1]
+        self.container.add_type(self.tid,
+                                key=self.key, ns=self.tid)
+        self.ns.add_type(self.tid, key=self.key, ns=self.tid)
 
     def post_sub(self):
-        print "POST SUB TypedefStructStatement"
+        #print "POST SUB TypedefStructStatement"
         #self.ns.leave()
         namespace.leave(self.ns)
-        namespace.add_type((('symbol', self.ns_name),))
+        #namespace.add_type((('symbol', self.ns_name),))
+
+    def commit(self):
+        #print "tid", self.tid
+        #print "name", self.name
+        #print "key", self.key
+        namespace.add_type(self.name, key=self.key, ns=self.tid)
 
 
 class ExprStatement(CppStatement):
@@ -365,6 +317,19 @@ class IfStatement(CppStatement):
     tag = 'if'
     recognize = '^kw_if'
     extra_contents = ('elses',)
+
+    def __init__(self, text, parent, payload):
+        CppStatement.__init__(self, text, parent, payload)
+        self.scope = namespace.enter_scope()
+
+    def commit(self):
+        namespace.leave_scope()
+
+    def pre_sub(self):
+        pass
+
+    def post_sub(self):
+        pass
 
 
 class ElseStatement(CppStatement):
@@ -435,6 +400,9 @@ class NamespaceStatement(CppStatement):
 
     def post_sub(self):
         namespace.leave(self.ns)
+        #print "=============================================================="
+        #print namespace.current()
+        #print "=============================================================="
 
 
 class AssignmentStatement(ExprStatement):
@@ -467,9 +435,21 @@ class ClassDeclStatement(TypedefStructStatement):
                     (comma scope type_id)*
                    )?"""
 
+    def hook_id(self, ast):
+        TypedefStructStatement.hook_id(self, ast)
+        TypedefStructStatement.hook_tid(self, ast)
+
+    def pre_sub(self):
+        this = [Ast('type', self.tid, []),
+                Ast('id', (('symbol', 'this'),), []),
+                Ast('initialization', tuple(), [])]
+        VarDeclStatement("<this>", self, this).commit()
+        TypedefStructStatement.pre_sub(self)
 
 # a declaration of pointer variable may look like an arithmetic expression
 # a decl may also look like a class decl without {}
+
+
 class VarDeclStatement(ExprStatement, ClassDeclStatement):
     tag = 'var'
     recognize = 'var_decl'
@@ -502,13 +482,12 @@ class VarDeclAnonStrucStatement(VarDeclStatement):
                       semicolon""",)
 
     def pre_sub(self):
-        print "PRE SUB VarDeclAnonStrucStatement"
+        #print "PRE SUB VarDeclAnonStrucStatement"
         self.ns_name = anon()
         #self.ns = Namespace(self.ns_name, Namespace.current())
         self.ns = namespace.enter(self.ns_name, key=self.ns_key)
         self.type = (('symbol', self.ns_name),)
         #Namespace.current().add_type(self.type, ns=self.ns_name)
-        namespace.add_type(self.type, ns=self.ns_name)
         #Namespace.current().add_namespace(self.ns)
         #self.ns.enter()
 
@@ -519,7 +498,7 @@ class VarDeclAnonStrucStatement(VarDeclStatement):
         self.name = ast.tokens
 
     def post_sub(self):
-        print "POST SUB VarDeclAnonStrucStatement"
+        #print "POST SUB VarDeclAnonStrucStatement"
         #self.ns.leave()
         namespace.leave(self.ns)
 
@@ -527,6 +506,7 @@ class VarDeclAnonStrucStatement(VarDeclStatement):
         self.ns.key = self.ns_key
         VarDeclStatement.commit(self)
         #Namespace.current().add_var(self.name, type=self.ns_name)
+        namespace.add_type(self.type, ns=self.ns_name)
         namespace.add_var(self.name, type=self.type)
 
 
@@ -537,32 +517,51 @@ class FuncDeclStatement(CppStatement):
 
     def hook_param(self, ast):
         self.params.append(ast)
+        #print "DECLARE PARAMETER", ast
 
     def hook_id(self, ast):
-        print "got id capture", ast
+        #print "got id capture", ast
         self.name = ast.tokens
-        self.ns_name = ast.tokens[0][1]
+        self.ns_name = ast.tokens[-1][1]
+
+    def hook_id_and_type(self, ast):
+        #print "got operator id capture", ast
+        self.name = ast.tokens
+        self.ns_name = ast.tokens[-1][1]
 
     def hook_initialization(self, ast):
-        print "got initialization capture", ast
+        #print "got initialization capture", ast
+        pass
 
     def pre_sub(self):
-        print "PRE SUB FuncDeclStatement"
+        #print "PRE SUB FuncDeclStatement"
         self.ns = namespace.enter(self.ns_name, key='function')
         for p in self.params:
             VarDeclStatement('', self, p.children).commit()
-        #self.ns = Namespace(self.name, Namespace.current(), key='function')
-        #Namespace.current().add_namespace(self.ns)
-        #self.ns.enter()
+        namespace.add_func((('symbol', self.ns_name),), self.params, self)
 
     def post_sub(self):
-        print "POST SUB FuncDeclStatement"
+        #print "POST SUB FuncDeclStatement"
         namespace.leave(self.ns)
+
+    def commit(self):
+        namespace.add_func((('symbol', self.ns_name),), self.params, self)
 
 
 class ConstructorStatement(FuncDeclStatement):
     tag = 'ctor'
     recognize = 'constructor_decl'
+    descriptors = {'name': '', 'params': [], 'ctor': []}
+
+    def hook_CTOR(self, ast):
+        self.ctor = ast.children
+
+    def commit(self):
+        FuncDeclStatement.commit(self)
+        self.ns.enter()
+        for c in self.ctor:
+            self.process_payload(c)
+        self.ns.leave()
 
 
 class DestructorStatement(FuncDeclStatement):
@@ -572,7 +571,30 @@ class DestructorStatement(FuncDeclStatement):
 
 class UsingStatement(CppStatement):
     tag = 'using'
-    recognize = 'kw_using kw_namespace? id'
+    recognize = 'kw_using #ns:kw_namespace? #id:id'
+
+    def hook_ns(self, ast):
+        self.mode = len(ast.tokens) and 'ns' or 'sym'
+
+    def hook_id(self, ast):
+        self.sym = ast.tokens
+
+    def commit(self):
+        if self.mode == 'ns':
+            ns = namespace.current.find_namespace(self.sym)
+            namespace.current().namespaces.update(ns.namespaces)
+            namespace.current().symbols.update(ns.symbols)
+        else:
+            x = namespace.resolve(self.sym)
+            if x is None:
+                print "COULDN'T RESOLVE", self.sym
+                raise InvalidStatement(self.text)
+            #print self.sym
+            name = self.sym[-1][1]
+            if x[0] == namespace.VAR:
+                namespace.current().add_var(name, **x[1])
+            elif x[0] == namespace.TYPE:
+                namespace.current().add_type(name, **x[1])
 
 
 class ExternLinkage(CppStatement):

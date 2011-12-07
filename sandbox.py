@@ -5,9 +5,31 @@ from cppy import namespace as ns
 mb = ('namespace_member', '::')
 s = lambda x: ('symbol', x)
 
+test = open('tests/demo.i')
+
+if False:
+    test = """
+    typedef int pouet;
+    typedef struct { pouet plop; } coin;
+    namespace hop {
+        typedef struct foobar
+        {
+            pouet a;
+            plop b;
+        } alias;
+    };
+    //typedef hop::alias blabla;
+    void toto(int pouet, char* plop) {
+        if(pouet) {
+            printf("%s hop", plop);
+        }
+        return pouet*2;
+    }
+    """
+
 if True:
     t = lambda x, e: cppy.match(cppy.tokenize(x), '#capture:(%s)' % e)
-    c = cppy.Cpp(open('tests/demo.i_short'))
+    c = cppy.Cpp(test)
     #c = cppy.Cpp(open('tests/hello.c'))
     ass = c.sub[-1].sub[-11]
     from cppy.cpp import counter as recog_stats

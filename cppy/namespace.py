@@ -1,12 +1,13 @@
 __all__ = [
     'resolve',
     'enter', 'leave', 'root', 'delete',
-    'enter_scope', 'leave_scope'
+    'enter_scope', 'leave_scope',
 ]
 
 
 VAR = 'var'
 TYPE = 'type'
+FUNC = 'func'
 
 
 class Namespace(object):
@@ -17,14 +18,15 @@ class Namespace(object):
         self.parent = parent
         self.scopes = [{}]
         self.namespaces = {}
+        self.functions = {}
         if 'key' in metadata:
             self.key = metadata['key']
             del metadata['key']
         else:
             self.key = 'namespace'
         self.metadata = metadata
-        print "NEW NAMESPACE"
-        print str(self)
+        #print "NEW NAMESPACE"
+        #print str(self)
 
     def assign(self, ns):
         self.scopes = ns.scopes
@@ -70,6 +72,19 @@ class Namespace(object):
     def add_namespace(self, ns, **metadata):
         self.namespaces[ns.name] = ns
 
+    def add_func(self, toks, params, statement):
+        container, name = self.interpret_tokens(toks)
+        params = tuple(params)
+        F = container.functions
+        if name in F:
+            f = F[name]
+            if params not in f:
+                f[params] = statement
+            #elif f[params] != statement:
+            #    raise InvalidStatement()
+        else:
+            F[name] = {params: statement}
+
     def interpret_tokens(self, toks):
         name = ''
         ns = []
@@ -91,23 +106,25 @@ class Namespace(object):
             container.symbols[name] = (what, metadata)
 
     def find_namespace(self, name):
-        print "find_namespace", name, "in", self
+        #print "find_namespace", name, "in", self
         if name in self.namespaces:
-            print "in here!"
+            #print "in here!"
             return self.namespaces[name]
         if name == self.name:
-            print "self"
+            #print "self"
             return self
         if self.parent is not None:
-            print "to parent"
+            #print "to parent"
             return self.parent.find_namespace(name)
-        print "nothing", self.parent, self.name, self.namespaces
+        #print "nothing", self.parent, self.name, self.namespaces
         return None
 
     def resolve_symbol(self, name):
         for i in xrange(len(self.scopes) - 1, -1, -1):
             if name in self.scopes[i]:
                 return self.scopes[i][name]
+        if name in self.functions:
+            return (FUNC, self.functions[name])
         if self.parent:
             return self.parent.resolve_symbol(name)
         return None
@@ -125,6 +142,9 @@ class Namespace(object):
                 build.append(ns.dump(level + 1))
             else:
                 build.append(indent + 'RECURSIVE!!!')
+        for sym, dic in self.functions.iteritems():
+            for params, sta in dic.iteritems():
+                build.append(indent + '  func: ' + sta.text)
         for sym, stype in self.symbols.iteritems():
             build.append(indent + '  ' + str(sym) + ': ' + str(stype))
         build.append(indent + '}')
@@ -155,8 +175,10 @@ def enter(name, **metadata):
 def delete(ns):
     if ns is Namespace.current():
         ns.leave()
-    if ns in Namespace.current().namespaces:
-        del Namespace.current().namespaces[ns.name]
+    #if ns in Namespace.current().namespaces:
+    #    del Namespace.current().namespaces[ns.name]
+    if ns.parent:
+        del ns.parent.namespaces[ns.name]
 
 
 def leave(ns):
@@ -187,3 +209,7 @@ def add_type(tokens, **metadata):
 
 def add_var(tokens, **metadata):
     Namespace.current().add_var(tokens, **metadata)
+
+
+def add_func(tokens, params, statement):
+    Namespace.current().add_func(tokens, params, statement)

@@ -17,6 +17,7 @@ keyword = [
     'kw_if', 'kw_else', 'kw_struct', 'kw_union', 'kw_return', 'kw_namespace',
     'kw_new', 'kw_delete', 'kw_operator', 'kw_typename', 'kw_template',
     'kw_throw', 'kw_using', 'kw_restrict', 'kw_extension', 'kw_void',
+    'kw_inline',
 ]
 
 type_spec = [
@@ -37,6 +38,7 @@ token_pattern = r"""
 |(?P<kw_while>\bwhile\b)
 |(?P<kw_gcc_attr>\b__attribute__\b)
 |(?P<kw_do>\bdo\b)
+|(?P<kw_inline>\binline\b)
 |(?P<kw_void>\bvoid\b)
 |(?P<kw_extension>\b__extension__\b)
 |(?P<kw_restrict>\b__restrict\b)
@@ -61,7 +63,7 @@ token_pattern = r"""
 |(?P<access>(?:\.|->)[*]?)
 |(?P<ampersand>[&])
 |(?P<comma>[,])
-|(?P<minus>[-])
+|(?P<minus>[-](?!=))
 |(?P<semicolon>[;])
 |(?P<tilde>[~])
 |(?P<open_angle>(?<!<)[<](?!<))
