@@ -14,7 +14,7 @@ class Namespace(object):
 
     def __init__(self, name='', parent=None, **metadata):
         self.name = name
-        self.parent = None
+        self.parent = parent
         self.scopes = [{}]
         self.namespaces = {}
         if 'key' in metadata:
@@ -91,18 +91,26 @@ class Namespace(object):
             container.symbols[name] = (what, metadata)
 
     def find_namespace(self, name):
+        print "find_namespace", name, "in", self
         if name in self.namespaces:
+            print "in here!"
             return self.namespaces[name]
         if name == self.name:
+            print "self"
             return self
         if self.parent is not None:
+            print "to parent"
             return self.parent.find_namespace(name)
+        print "nothing", self.parent, self.name, self.namespaces
         return None
 
     def resolve_symbol(self, name):
         for i in xrange(len(self.scopes) - 1, -1, -1):
             if name in self.scopes[i]:
                 return self.scopes[i][name]
+        if self.parent:
+            return self.parent.resolve_symbol(name)
+        return None
 
     def resolve(self, toks):
         container, name = self.interpret_tokens(toks)
@@ -137,7 +145,7 @@ def enter(name, **metadata):
     if name in pool:
         ret = pool[name]
     else:
-        ret = Namespace(name, Namespace.current(), **metadata)
+        ret = Namespace(name, current(), **metadata)
         pool[ret.name] = ret
         #Namespace.current().add_namespace(ret)
     ret.enter()

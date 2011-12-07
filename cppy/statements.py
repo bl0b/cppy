@@ -10,6 +10,7 @@ import sys
 from itertools import chain, imap, starmap
 #from namespace import Namespace
 import namespace
+from namespace import Namespace
 
 anon_counter = 0
 
@@ -238,6 +239,7 @@ class CppStatement(object):
     def process_payload(self, ast):
         print ast
         hook = 'hook_' + ast.name
+        print "DEBUG process_payload", hook, ast
         if hook in dir(self):
             return getattr(self, hook)(ast)
         elif self.parent:
@@ -301,8 +303,8 @@ class TypedefAnonStatement(TypedefStatement):
     absorb_post = ('ref_deref* #id:symbol semicolon',)
 
     def pre_sub(self):
-        #self.ns = Namespace(anon(), Namespace.current())
-        self.ns = namespace.enter(anon(), key=self.key)
+        self.ns = Namespace(anon(), Namespace.current())
+        #self.ns = namespace.enter(anon(), key=self.key)
         self.ns.enter()
 
     def hook_key(self, ast):
@@ -320,6 +322,7 @@ class TypedefAnonStatement(TypedefStatement):
         ns.assign(self.ns)
         ns.key = self.key
         self.ns = ns
+        namespace.add_type((('symbol', self.ns_name),))
         #Namespace.current().add_namespace(ns)
 
 
@@ -349,6 +352,7 @@ class TypedefStructStatement(TypedefStatement):
         print "POST SUB TypedefStructStatement"
         #self.ns.leave()
         namespace.leave(self.ns)
+        namespace.add_type((('symbol', self.ns_name),))
 
 
 class ExprStatement(CppStatement):
@@ -537,21 +541,19 @@ class FuncDeclStatement(CppStatement):
     def hook_id(self, ast):
         print "got id capture", ast
         self.name = ast.tokens
+        self.ns_name = ast.tokens[0][1]
 
     def hook_initialization(self, ast):
         print "got initialization capture", ast
 
     def pre_sub(self):
         print "PRE SUB FuncDeclStatement"
-        self.ns = namespace.enter(self.name, key='function')
+        self.ns = namespace.enter(self.ns_name, key='function')
         for p in self.params:
             VarDeclStatement('', self, p.children).commit()
         #self.ns = Namespace(self.name, Namespace.current(), key='function')
         #Namespace.current().add_namespace(self.ns)
         #self.ns.enter()
-
-    def hook_id(self, ast):
-        self.ns_name = ast.tokens[0][1]
 
     def post_sub(self):
         print "POST SUB FuncDeclStatement"
