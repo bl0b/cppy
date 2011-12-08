@@ -88,11 +88,19 @@ class Namespace(object):
     def interpret_tokens(self, toks):
         name = ''
         ns = []
-        for t in toks:
-            if t[0] == 'namespace_member':
-                ns.append(name)
-            if t[0] == 'symbol':
-                name = t[1]
+        template_rec = 0
+        for i in xrange(len(toks)):
+        #for t in toks:
+            t = toks[i]
+            if t[0] == 'open_angle':
+                template_rec += 1
+            elif t[0] == 'close_angle':
+                template_rec -= 1
+            elif template_rec == 0:
+                if t[0] == 'namespace_member':
+                    ns.append(name)
+                elif t[0] == 'symbol':
+                    name = t[1]
         if len(ns) == 0:
             return self, name
         root = self.find_namespace(ns[0])
@@ -131,7 +139,10 @@ class Namespace(object):
 
     def resolve(self, toks):
         container, name = self.interpret_tokens(toks)
-        return container.resolve_symbol(name)
+        ret = container.resolve_symbol(name)
+        if ret is None and container and name in container.namespaces:
+            ret = container.namespaces[name]
+        return ret
         #return name in container.symbols and container.symbols[name] or None
 
     def dump(self, level=0):

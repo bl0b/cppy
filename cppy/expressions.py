@@ -12,10 +12,10 @@ expressions = {
 
 'binop':
     """arith|boolop|comp|open_angle|close_angle|shift
-     | bitop|tilde|ampersand|assign_set|assign_update""",
+     | bitop|ampersand|assign_set|assign_update""",
 
 'ref_deref':
-    'ampersand|star',
+    'ampersand|star|type_spec',  # can have interleaved const
 
 # IDENTIFIERS
 
@@ -32,13 +32,20 @@ expressions = {
        | ref_deref
        | binop
        | boolop
+       | access
+       | incdec
        )""",
+
+'typeof':
+    'kw_typeof open_paren expr close_paren',
 
 'container':
     'symbol template_inst?',
 
 'type_id':
-    """(kw_void star+
+    """kw_typename?
+       (kw_void star+
+       |typeof
        |(kw_template template_spec)?
         (kw_class|kw_struct|kw_union)?
         container
@@ -47,24 +54,38 @@ expressions = {
 
 'ptr_to_func':
     """type_spec* (kw_void|type_id) ref_deref*
-       open_paren (type_id namespace_member)? star symbol? close_paren
-       open_paren param_decl_list close_paren""",
+       open_paren (type_id namespace_member)? star #id:symbol? close_paren
+       open_paren (kw_void|param_decl_list)? close_paren""",
+
+'ref_to_array':
+    """type_spec* (kw_void ref_deref+|type_id ref_deref*)
+       open_paren ampersand #id:symbol? close_paren
+       open_square expr close_square""",
 
 # TEMPLATES
 
 'template_param_spec':
-    """(kw_template|kw_typename|kw_class|kw_struct|kw_union)?
-       type_id (assign_set type_id ref_deref*)?""",
+    """( (kw_template|kw_typename|kw_class|kw_struct|kw_union)
+         #template_tid:type_id
+       | (kw_template|kw_typename|kw_class|kw_struct|kw_union)
+       | #template_vid:(type_id symbol)
+       | #template_tid:symbol
+       ) (assign_set type_id ref_deref*)?""",
 
 'template_spec':
     """open_angle
-       (#template_param:template_param_spec
-        (comma #template_param:template_param_spec)*
+       (template_param_spec
+        (comma template_param_spec)*
        )?
        close_angle""",
 
 'template_param_inst':
-    '#template_param_inst:(type_id ref_deref*|number)',
+    """#template_param_inst:(type_spec* ref_deref* type_id ref_deref*
+                            |expr
+                            |type_spec* kw_void ref_deref* type_spec*
+                            |type_spec+)
+     | open_paren template_param_inst close_paren
+    """,
 
 'template_inst':
     """open_angle
@@ -80,7 +101,7 @@ expressions = {
 # LVALUES
 
 'anon_lvalue_access':
-    'open_square expr close_square | call',
+    'open_square expr close_square',
 
 'raw_lvalue':
     'id #ACCESS:(access lvalue|anon_lvalue_access)*',
@@ -113,14 +134,15 @@ expressions = {
 
 'param_decl':
     """ptr_to_func
+     | ref_to_array
      | type_spec*
        #type:type_id
        ref_deref*
-       kw_restrict?
        #id:id?
        (open_square number? close_square)?
        (open_square number? close_square)*
-       #initialization:(assign_set expr)?""",
+       #initialization:(assign_set expr)?
+       gcc_attribute*""",
 
 'param_decl_list':
     '#param:param_decl (comma #param:param_decl)* (comma ellipsis)?',
@@ -148,17 +170,16 @@ expressions = {
        open_paren close_paren""",
 
 'func_decl':
-    """kw_extension?
-       (type_spec string)?
-       (((kw_inline|type_spec)? #type:kw_void
-        |#template_type:(kw_template template_spec)?
-         kw_inline?
-         type_spec*
+    """(type_spec string)?
+       #template_type:(kw_template template_spec)?
+       ((type_spec? #type:kw_void
+        |type_spec*
          #type:type_id
          ref_deref*
         )
+        gcc_attribute*
         #id:(id|operator_id)
-       |kw_inline? #id_and_type:(kw_operator symbol)
+       |#id_and_type:(kw_operator symbol)
        )
        template_inst?
        open_paren
@@ -167,10 +188,12 @@ expressions = {
        type_spec?""",  # final const if present
 
 'var_decl':
-    """kw_extension?
+    """(type_spec string)?
        type_spec*
        (#type:type_id ref_deref* core_decl (comma #decl:core_decl)*
+       |ref_to_array
        |ptr_to_func)
+       gcc_attribute*
        semicolon""",
 
 # EXPRESSIONS
@@ -184,21 +207,22 @@ expressions = {
                                  )?""",
 
 'expr1':
-    """immed
+    """#immed:immed
      | #READ:lvalue
      | incdec #UPDATE:lvalue
      | #UPDATE:lvalue incdec
      | open_paren expr close_paren (open_square expr close_square)*
-     | typecast+ expr1
+     | #TYPECAST:(typecast+ expr1)
      | #CREATION:new_inst
      | #CALL:func_call
-     | ampersand expr1
-     | star expr1
-     | kw_sizeof open_paren type_spec* type_id close_paren
+     | #REF:(ampersand expr1)
+     | #DEREF:(star expr1)
+     | #SIZEOF:(kw_sizeof open_paren type_spec* type_id close_paren)
+     | #NEG:(tilde expr1)
     """,
 
 'expr2':
-    'expr1 (binop expr2)?',
+    '#expr2:(expr1 (#op:binop expr1)*)',
 
 'expr':
     'expr2 (ternary expr colon expr)?',

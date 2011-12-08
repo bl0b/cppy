@@ -17,7 +17,7 @@ keyword = [
     'kw_if', 'kw_else', 'kw_struct', 'kw_union', 'kw_return', 'kw_namespace',
     'kw_new', 'kw_delete', 'kw_operator', 'kw_typename', 'kw_template',
     'kw_throw', 'kw_using', 'kw_restrict', 'kw_extension', 'kw_void',
-    'kw_inline', 'kw_sizeof', 'kw_enum',
+    'kw_inline', 'kw_sizeof', 'kw_enum', 'kw_typeof',
 ]
 
 type_spec = [
@@ -38,6 +38,7 @@ token_pattern = r"""
 |(?P<kw_while>\bwhile\b)
 |(?P<kw_gcc_attr>\b__attribute__\b)
 |(?P<kw_do>\bdo\b)
+|(?P<kw_typeof>\b(?:__typeof|__typeof__)\b)
 |(?P<kw_enum>\benum\b)
 |(?P<kw_sizeof>\bsizeof\b)
 |(?P<kw_inline>\binline\b)
@@ -62,14 +63,14 @@ token_pattern = r"""
 |(?P<kw_new>\bnew\b)
 |(?P<kw_delete>\bdelete\b)
 |(?P<symbol>""" + sym_assert + r"""\b[a-zA-Z_][a-zA-Z0-9_]*\b)
-|(?P<access>(?:\.|->)[*]?)
+|(?P<access>(?:\.(?!\.\.)|->)[*]?)
 |(?P<ampersand>[&])
 |(?P<comma>[,])
-|(?P<minus>[-](?!=))
+|(?P<minus>[-](?![=>-]))
 |(?P<semicolon>[;])
 |(?P<tilde>[~])
-|(?P<open_angle>(?<!<)[<](?!<))
-|(?P<close_angle>(?<!>)[>](?!>))
+|(?P<open_angle>(?<!<)[<](?![<=]))
+|(?P<close_angle>(?<!>)[>](?![>=]))
 |(?P<open_square>[[])
 |(?P<close_square>[]])
 |(?P<open_paren>[(])
@@ -99,6 +100,10 @@ token_pattern = r"""
 token_re = re.compile(token_pattern, re.VERBOSE)
 
 
+discard_names = ('whitespace', 'kw_restrict', 'kw_extension')
+discard_values = ('static', 'inline', 'const', 'volatile')
+
+
 class TokenizerException(Exception):
     pass
 
@@ -112,7 +117,7 @@ def tokenize_iter(text):
         pos = m.end()
         tokname = m.lastgroup
         tokvalue = m.group(tokname)
-        if tokname != 'whitespace':  # don't emit whitespace
+        if tokname not in discard_names and tokvalue not in discard_values:
             yield tokname, tokvalue
     if pos != len(text):
         msg = 'tokenizer stopped at pos %r of %r in "%s" at "%s"' % (

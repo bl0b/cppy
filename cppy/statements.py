@@ -74,7 +74,8 @@ class CppMeta(type):
         ret = cls.__recog(tokens)
         clsbyname = lambda n: getattr(sys.modules[__name__], n)
         classes = map(clsbyname, ret.iterkeys())
-        #print "     classes", classes
+        print
+        print "     classes", classes
 
         if ret and len(ret) > 1:
             # try and disambiguate stuff
@@ -96,7 +97,7 @@ class CppMeta(type):
 
         validate = lambda c: cls.validate(scope, c, text, ret[c.__name__])
         statements = filter(lambda x: x is not None, imap(validate, classes))
-        #print "     statements", statements
+        print "     statements", statements
         if len(statements) == 1:
             return statements[0]
         else:
@@ -105,7 +106,7 @@ class CppMeta(type):
 
     @classmethod
     def validate(cls, scope, C, text, captures):
-        #print "     validating", C, text, scope, captures
+        print "     validating", C, text, scope, captures
         try:
             tmp = namespace.enter(anon())
             C(text, scope, captures)
@@ -130,15 +131,67 @@ class CppStatement(object):
     def __init__(self, text, parent, payload):
         #print "init cpp statement", type(self), text
         #print "         payload", payload
+        self.template_types = []
+        self.template_vars = []
         self.parent = parent
         self.text = text
         self.sub = []
         for xc in self.extra_contents:
             setattr(self, xc, [])
         for k, v in self.descriptors.iteritems():
-            setattr(self, k, v)
+            setattr(self, k, v())
         for discard in imap(self.process_payload, payload):
             pass
+
+    def commit_template_args(self):
+        self.ns.enter()
+        for tt in self.template_types:
+            namespace.add_type(tt)
+        for tv in self.template_vars:
+            namespace.add_var(tv)
+        self.ns.leave()
+
+    def hook_immed(self, ast):
+        pass
+
+    def hook_ANON_CALL(self, ast):
+        pass
+
+    def hook_TYPECAST(self, ast):
+        pass
+
+    def hook_CREATION(self, ast):
+        pass
+
+    def hook_REF(self, ast):
+        pass
+
+    def hook_DEREF(self, ast):
+        pass
+
+    def hook_SIZEOF(self, ast):
+        pass
+
+    def hook_NEG(self, ast):
+        pass
+
+    def hook_op(self, ast):
+        pass
+
+    def hook_expr2(self, ast):
+        ast.dump()
+        reduce(lambda a, b: self.process_payload(b), ast.children, None)
+        pass
+
+    def hook_expr(self, ast):
+        ast.dump()
+        pass
+
+    def hook_template_tid(self, ast):
+        self.template_types.append(ast.tokens[-1][1])
+
+    def hook_template_vid(self, ast):
+        self.template_vars.append(ast.tokens[-1][1])
 
     def resolve(self, ast):
         return namespace.resolve(ast.tokens)
@@ -185,13 +238,13 @@ class CppStatement(object):
     def process_payload(self, ast):
         #print ast
         hook = 'hook_' + ast.name
-        #print "DEBUG process_payload", hook, ast
+        print "     process_payload", hook, ast
         if hook in dir(self):
             return getattr(self, hook)(ast)
         #elif self.parent:
         #    return self.parent.process_payload(ast)
         else:
-            raise UnhandledCapture(ast.name, ast)
+            raise UnhandledCapture(type(self).__name__, ast)
 
     def hook_template_type(self, toks):
         #print "| template_type", toks
@@ -215,26 +268,33 @@ class CppStatement(object):
 
     def hook_CALL(self, toks):
         print "DETECTED A CALL!!", toks
+        pass
 
     def hook_UPDATE(self, toks):
-        print "DETECTED AN UPDATE!!", toks
+        #print "DETECTED AN UPDATE!!", toks
+        pass
 
     def hook_READ(self, ast):
         x = namespace.resolve(ast.tokens)
-        if x is None or x[0] != 'var':
-            print "CAN'T READ", x
+        if x is not None and x[0] not in ('var', 'func'):  # probably a type
+            print "CAN'T READ", x, ast
             raise InvalidStatement(self.text)
+        #if x is None or x[0] != 'var':
+        #    # dirty hack to cope with use of constant template parameters
+        #    if ast.tokens[-1][1] not in self.template_vars:
+        #        print "CAN'T READ", x, ast
+        #        raise InvalidStatement(self.text)
 
     def hook_WRITE(self, ast):
         x = namespace.resolve(ast.tokens)
         if x is None or x[0] != 'var':
-            print "CAN'T WRITE", x
+            #print "CAN'T WRITE", x, ast
             raise InvalidStatement(self.text)
 
     def hook_CHECK_EXISTS(self, ast):
         x = namespace.resolve(ast.tokens)
         if x is None:
-            print "COULDN'T RESOLVE", ast.tokens
+            #print "COULDN'T RESOLVE", ast.tokens
             raise InvalidStatement(self.text)
 
 
@@ -259,10 +319,10 @@ class EnumStatement(CppStatement):
 
 class TypedefStatement(CppStatement):
     tag = 'typedef'
-    descriptors = {'tid': None, 'key': None}
+    descriptors = {'tid': lambda: None, 'key': lambda: None}
     recognize = """kw_typedef
                    type_spec*
-                   (kw_struct|kw_union|kw_class)?
+                   (kw_struct|kw_union|kw_class|kw_typename|kw_template)?
                    (#tid:type_id ref_deref* #id:type_id
                    |ref_deref* #id:type_id)
                    (open_square expr close_square)*
@@ -293,8 +353,10 @@ class TypedefStructStatement(TypedefStatement):
                    #key:(kw_struct|kw_union|kw_class)
                    #tid:type_id?
                    $"""
-    absorb_post = ('ref_deref* #id:symbol ($|semicolon)',)
-    descriptors = {'name': None, 'tid': None, 'id': None}
+    absorb_post = ('ref_deref* #id:symbol gcc_attribute* ($|semicolon)',)
+    descriptors = {'name': lambda: None,
+                   'tid': lambda: None,
+                   'id': lambda: None}
 
     def hook_tid(self, ast):
         self.tid = ast.tokens
@@ -312,6 +374,7 @@ class TypedefStructStatement(TypedefStatement):
         #print "PRE SUB TypedefStructStatement", self.key, self.tid_name,
         #print self.tid
         self.ns = namespace.enter(self.tid_name, key=self.key)
+        self.commit_template_args()
         #Namespace.current().add_namespace(self.ns)
         #self.ns.enter()
         self.container.add_type(self.tid,
@@ -400,6 +463,12 @@ class WhileStatement(CppStatement):
     tag = 'while'
     recognize = '^kw_while'
 
+    def pre_sub(self):
+        namespace.enter_scope()
+
+    def post_sub(self):
+        namespace.leave_scope()
+
 
 class ReturnStatement(CppStatement):
     tag = 'return'
@@ -469,8 +538,8 @@ class ClassDeclStatement(TypedefStructStatement):
         this = [Ast('type', self.tid, []),
                 Ast('id', (('symbol', 'this'),), []),
                 Ast('initialization', tuple(), [])]
-        VarDeclStatement("<this>", self, this).commit()
         TypedefStructStatement.pre_sub(self)
+        VarDeclStatement("<this>", self, this).commit()
 
 # a declaration of pointer variable may look like an arithmetic expression
 # a decl may also look like a class decl without {}
@@ -479,7 +548,9 @@ class ClassDeclStatement(TypedefStructStatement):
 class VarDeclStatement(ExprStatement, ClassDeclStatement):
     tag = 'var'
     recognize = 'var_decl'
-    descriptors = {'name': None, 'type': None, 'initialization': None}
+    descriptors = {'name': lambda: None,
+                   'type': lambda: None,
+                   'initialization': lambda: None}
 
     def hook_id(self, ast):
         self.name = ast.tokens
@@ -487,6 +558,10 @@ class VarDeclStatement(ExprStatement, ClassDeclStatement):
 
     def hook_type(self, toks):
         self.type = toks
+
+    def hook_param(self, ast):
+        # appears in ptr_to_func declarations
+        pass
 
     def hook_initialization(self, toks):
         self.initialization = toks
@@ -503,10 +578,19 @@ class VarDeclStrucStatement(VarDeclStatement):
     tag = 'var'
     recognize = '#key:(kw_struct|kw_union) #tid:symbol?$'
     absorb_post = ("""ref_deref*
-                      (#id:symbol (comma ref_deref* #id:symbol)*)?
+                      (#id:symbol
+                       (open_square expr close_square)*
+                       (comma
+                        ref_deref*
+                        #id:symbol
+                        (open_square expr close_square)*
+                       )*
+                      )?
                       semicolon""",)
-    descriptors = {'name': None, 'type': None, 'initialization': None,
-                   'names': []}
+    descriptors = {'name': lambda: None,
+                   'type': lambda: None,
+                   'initialization': lambda: None,
+                   'names': lambda: []}
 
     def pre_sub(self):
         #print "PRE SUB VarDeclAnonStrucStatement"
@@ -515,16 +599,17 @@ class VarDeclStrucStatement(VarDeclStatement):
         self.type = (('symbol', self.ns_name),)
         namespace.add_type(self.type, ns=self.ns_name)
         self.ns = namespace.enter(self.ns_name, key=self.ns_key)
+        self.commit_template_args()
         #Namespace.current().add_type(self.type, ns=self.ns_name)
         #Namespace.current().add_namespace(self.ns)
         #self.ns.enter()
 
     def hook_key(self, ast):
         self.ns_key = ast.tokens[0][1]
-        print "key", self.ns_key
+        #print "key", self.ns_key
 
     def hook_tid(self, ast):
-        print "tid", ast
+        #print "tid", ast
         self.ns_name = len(ast.tokens) and ast.tokens[-1][1] or anon()
 
     def hook_id(self, ast):
@@ -546,7 +631,7 @@ class VarDeclStrucStatement(VarDeclStatement):
 class FuncDeclStatement(CppStatement):
     tag = 'func'
     recognize = '^func_decl'
-    descriptors = {'name': '', 'params': []}
+    descriptors = {'name': lambda: '', 'params': lambda: []}
     absorb_post = []
     absorb = []
 
@@ -571,6 +656,7 @@ class FuncDeclStatement(CppStatement):
     def pre_sub(self):
         #print "PRE SUB FuncDeclStatement"
         self.ns = namespace.enter(self.ns_name, key='function')
+        self.commit_template_args()
         for p in self.params:
             VarDeclStatement('', self, p.children).commit()
         namespace.add_func((('symbol', self.ns_name),), self.params, self)
@@ -586,7 +672,18 @@ class FuncDeclStatement(CppStatement):
 class ConstructorStatement(FuncDeclStatement):
     tag = 'ctor'
     recognize = 'constructor_decl'
-    descriptors = {'name': '', 'params': [], 'ctor': []}
+    descriptors = {'name': lambda: '',
+                   'params': lambda: [],
+                   'ctor': lambda: []}
+
+    def hook_id(self, ast):
+        FuncDeclStatement.hook_id(self, ast)
+        test = type(self.parent) is ClassDeclStatement
+        test = test and self.ns_name == self.parent.name[-1][1]
+        if not test:
+            #print "ns_name", self.ns_name
+            #print "parent.ns_name", self.parent.name
+            raise InvalidStatement("constructor name doesn't equal class name")
 
     def hook_CTOR(self, ast):
         self.ctor = ast.children
@@ -616,9 +713,13 @@ class UsingStatement(CppStatement):
 
     def commit(self):
         if self.mode == 'ns':
-            ns = namespace.current.find_namespace(self.sym)
+            #ns = namespace.current().find_namespace(self.sym)
+            ns = namespace.resolve(self.sym)
             namespace.current().namespaces.update(ns.namespaces)
             namespace.current().symbols.update(ns.symbols)
+            for ftoks, fdic in ns.functions.iteritems():
+                for fpar, fsta in fdic.iteritems():
+                    namespace.current().add_func(ftoks, fpar, fsta)
         else:
             x = namespace.resolve(self.sym)
             if x is None:

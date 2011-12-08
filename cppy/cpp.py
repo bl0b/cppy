@@ -94,6 +94,17 @@ def cpp_read(f):
     #return filter(lambda s: s not in ('', ';', ','), lines)
 
 
+last_line_len = 0
+
+
+def dump(lines, start):
+    global last_line_len
+    print ' ' * last_line_len,
+    l = '\r %i/%i %s' % (start, len(lines), lines[start])
+    print l,
+    last_line_len = len(l)
+
+
 class Cpp(object):
     "Usable representation of a C++ file. Tries to be as accurate as possible."
     keywords = {
@@ -141,6 +152,7 @@ class Cpp(object):
     @staticmethod
     def parse(scope, lines, start, level):
         #print level, "line #%i" % start, lines[start]
+        dump(lines, start)
         if lines[start] == '{':
             ret = CppStatement('<DATA>', scope, [])
             start -= 1
@@ -151,6 +163,7 @@ class Cpp(object):
             raise InvalidStatement("Couldn't parse < %s >" % lines[start])
         for abs_expr in ret.absorb:
             start += 1
+            dump(lines, start)
             #print level, "ABSORB", abs_expr
             #print level, "-line #%i" % start, lines[start]
             ok, mstart, mend, groups = match(tokenize(lines[start]), abs_expr)
@@ -180,6 +193,7 @@ class Cpp(object):
                     ret.sub.append(statement)
                 for abspo in ret.absorb_post:
                     start += 1
+                    dump(lines, start)
                     #print level, "ABSORB POST", abspo
                     #print level, "-line #%i" % start, lines[start]
                     ok, mstart, mend, groups = match(tokenize(lines[start]),
@@ -190,11 +204,10 @@ class Cpp(object):
                                                + abspo
                                                + '\nafter '
                                                + type(ret).__name__
-                                               + '\n' + ret.text
-                                              )
+                                               + '\n' + ret.text)
                     ret.text += lines[start]
                     for g in groups:
-                        g.dump()
+                        #g.dump()
                         ret.process_payload(g)
                 ret.post_sub()
         ret.commit()

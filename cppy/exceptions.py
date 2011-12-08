@@ -10,10 +10,11 @@ class CppException(Exception):
 
 class UnhandledCapture(CppException):
 
-    def __init__(self, name, toks):
-        CppException.__init__(self, "Capture <%s> has no handler!" % name)
-        self.capture_name = name
-        self.capture_tokens = toks
+    def __init__(self, name, ast):
+        CppException.__init__(self, "Capture <%s> has no handler in class %s!"
+                                    % (ast.name, name))
+        self.capture_name = ast.name
+        self.capture_ast = ast
         #toks.dump()
 
 
