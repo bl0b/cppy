@@ -172,9 +172,14 @@ class Expr(list):
     def __str__(self):
         a = arity[self.amin, self.amax]
         p = str_pub(self)
+
+        def nice_str(x):
+            must_enclose = type(x) in (Expr, AltExpr) and len(x) > 1
+            return must_enclose and "(%s)" % str(x) or str(x)
+
         if a or p:
-            return p + '(' + self.sep.join(imap(str, self)) + ')' + a
-        return self.sep.join(imap(str, self))
+            return p + '(' + self.sep.join(imap(nice_str, self)) + ')' + a
+        return self.sep.join(imap(nice_str, self))
 
     def __repr__(self):
         a = arity[self.amin, self.amax]
@@ -402,9 +407,11 @@ def sub_compile_expr(tokens, i, inner=False):
                 next_publishes = str(tokens[i][1])
                 i += 1
             else:
-                raise TokenizerException('Expected symbol after sharp')
+                raise TokenizerException('Expected symbol after sharp '
+                                         + str(i) + ' ' + str(tokens))
             if tokens[i][0] != 'colon':
-                raise TokenizerException('Expected colon after symbol')
+                raise TokenizerException('Expected colon after symbol '
+                                         + str(i) + ' ' + str(tokens))
             i += 1
         elif t[1] == '^':
             next_publishes = None

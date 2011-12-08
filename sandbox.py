@@ -7,6 +7,12 @@ s = lambda x: ('symbol', x)
 
 test = open('tests/demo.i')
 
+recognize = cppy.statements.CppMeta.recognize
+
+st = """template<typename _StateT>
+inline bool operator==
+(const fpos<_StateT>& __lhs, const fpos<_StateT>& __rhs)"""
+
 if False:
     test = """
     typedef int pouet;

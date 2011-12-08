@@ -90,7 +90,8 @@ def cpp_read(f):
         nocomment = replace.join(ifilter(lambda x: x, nocomment.split(match)))
     nocomment += preserve
     lines = imap(str.strip, nocomment.splitlines())
-    return filter(lambda s: s not in ('', ';', ','), lines)
+    return filter(lambda s: s not in ('', ','), lines)
+    #return filter(lambda s: s not in ('', ';', ','), lines)
 
 
 class Cpp(object):
@@ -147,7 +148,7 @@ class Cpp(object):
             ret = CppMeta.recognize(lines[start], scope)
             #print "      %s" % (' ' * len(str(start))), ret
         if ret is None:
-            raise Exception("Couldn't parse < %s >" % lines[start])
+            raise InvalidStatement("Couldn't parse < %s >" % lines[start])
         for abs_expr in ret.absorb:
             start += 1
             #print level, "ABSORB", abs_expr
@@ -161,24 +162,41 @@ class Cpp(object):
             for g in groups:
                 ret.process_payload(g)
         if (start + 1) < len(lines) and lines[start + 1] == '{':
-            ret.pre_sub()
-            start += 2
-            while start < len(lines) and lines[start] != '}':
-                statement, start = Cpp.parse(ret, lines, start,
-                                             level + 1)
-                ret.sub.append(statement)
-            for abspo in ret.absorb_post:
-                start += 1
-                #print level, "ABSORB POST", abspo
-                #print level, "-line #%i" % start, lines[start]
-                ok, mstart, mend, groups = match(tokenize(lines[start]), abspo)
-                if not ok:
-                    raise InvalidStatement(lines[start])
-                ret.text += lines[start]
+            if ret.absorb_sub:
+                end = start + 1
+                while lines[end] != '}':
+                    end += 1
+                text = tokenize('\n'.join(lines[start + 2:end]))
+                ok, mstart, mend, groups = match(text, ret.absorb_sub)
                 for g in groups:
-                    g.dump()
                     ret.process_payload(g)
-            ret.post_sub()
+                start = end + 1
+            else:
+                ret.pre_sub()
+                start += 2
+                while start < len(lines) and lines[start] != '}':
+                    statement, start = Cpp.parse(ret, lines, start,
+                                                 level + 1)
+                    ret.sub.append(statement)
+                for abspo in ret.absorb_post:
+                    start += 1
+                    #print level, "ABSORB POST", abspo
+                    #print level, "-line #%i" % start, lines[start]
+                    ok, mstart, mend, groups = match(tokenize(lines[start]),
+                                                     abspo)
+                    if not ok:
+                        raise InvalidStatement('\n' + lines[start]
+                                               + '\nwhile expecting '
+                                               + abspo
+                                               + '\nafter '
+                                               + type(ret).__name__
+                                               + '\n' + ret.text
+                                              )
+                    ret.text += lines[start]
+                    for g in groups:
+                        g.dump()
+                        ret.process_payload(g)
+                ret.post_sub()
         ret.commit()
         return ret, start + 1
 

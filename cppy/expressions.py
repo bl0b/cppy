@@ -38,11 +38,17 @@ expressions = {
     'symbol template_inst?',
 
 'type_id':
-    """(kw_template template_spec)?
-       (kw_class|kw_struct|kw_union)?
-       container
-       (namespace_member container)*
-       template_inst?""",
+    """(kw_void star+
+       |(kw_template template_spec)?
+        (kw_class|kw_struct|kw_union)?
+        container
+        (namespace_member container)*
+        template_inst?)""",
+
+'ptr_to_func':
+    """type_spec* (kw_void|type_id) ref_deref*
+       open_paren (type_id namespace_member)? star symbol? close_paren
+       open_paren param_decl_list close_paren""",
 
 # TEMPLATES
 
@@ -106,7 +112,8 @@ expressions = {
        )""",
 
 'param_decl':
-    """type_spec*
+    """ptr_to_func
+     | type_spec*
        #type:type_id
        ref_deref*
        kw_restrict?
@@ -143,7 +150,7 @@ expressions = {
 'func_decl':
     """kw_extension?
        (type_spec string)?
-       ((kw_inline? #type:kw_void
+       (((kw_inline|type_spec)? #type:kw_void
         |#template_type:(kw_template template_spec)?
          kw_inline?
          type_spec*
@@ -160,11 +167,10 @@ expressions = {
        type_spec?""",  # final const if present
 
 'var_decl':
-    """type_spec*
-       #type:type_id
-       ref_deref*
-       core_decl
-       (comma #decl:core_decl)*
+    """kw_extension?
+       type_spec*
+       (#type:type_id ref_deref* core_decl (comma #decl:core_decl)*
+       |ptr_to_func)
        semicolon""",
 
 # EXPRESSIONS
@@ -188,6 +194,7 @@ expressions = {
      | #CALL:func_call
      | ampersand expr1
      | star expr1
+     | kw_sizeof open_paren type_spec* type_id close_paren
     """,
 
 'expr2':

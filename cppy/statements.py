@@ -118,12 +118,14 @@ class CppMeta(type):
 
 class CppStatement(object):
     __metaclass__ = CppMeta
-    recognize = 'semicolon semicolon'  # will never match :)
+    #recognize = 'semicolon semicolon'  # will never match :)
+    recognize = 'semicolon'
     tag = 'cpp'
     extra_contents = []
     descriptors = {}
     absorb = tuple()
     absorb_post = tuple()
+    absorb_sub = None
 
     def __init__(self, text, parent, payload):
         #print "init cpp statement", type(self), text
@@ -220,18 +222,39 @@ class CppStatement(object):
     def hook_READ(self, ast):
         x = namespace.resolve(ast.tokens)
         if x is None or x[0] != 'var':
+            print "CAN'T READ", x
             raise InvalidStatement(self.text)
 
     def hook_WRITE(self, ast):
         x = namespace.resolve(ast.tokens)
         if x is None or x[0] != 'var':
+            print "CAN'T WRITE", x
             raise InvalidStatement(self.text)
 
     def hook_CHECK_EXISTS(self, ast):
         x = namespace.resolve(ast.tokens)
         if x is None:
-            #print "COULDN'T RESOLVE", ast.tokens
+            print "COULDN'T RESOLVE", ast.tokens
             raise InvalidStatement(self.text)
+
+
+class EnumStatement(CppStatement):
+    tag = 'enum'
+    recognize = """kw_enum #id:symbol? $"""
+    absorb_sub = """#constant:(symbol (assign_set symbol)?)
+                    (comma #constant:(symbol (assign_set symbol)?))*"""
+
+    def hook_id(self, ast):
+        pass
+
+    def pre_sub(self):
+        pass
+
+    def post_sub(self):
+        pass
+
+    def hook_constant(self, ast):
+        namespace.add_var(ast.tokens[:1], type=(('symbol', 'int'),))
 
 
 class TypedefStatement(CppStatement):
@@ -242,6 +265,7 @@ class TypedefStatement(CppStatement):
                    (kw_struct|kw_union|kw_class)?
                    (#tid:type_id ref_deref* #id:type_id
                    |ref_deref* #id:type_id)
+                   (open_square expr close_square)*
                    semicolon"""
 
     def hook_tid(self, ast):
@@ -425,6 +449,8 @@ class AssignmentStatement(ExprStatement):
 
 class ClassDeclStatement(TypedefStructStatement):
     tag = 'class'
+    absorb = []
+    absorb_post = []
     recognize = """(kw_template template_spec)?
                    type_spec*
                    #key:(kw_class|kw_struct)
@@ -433,7 +459,7 @@ class ClassDeclStatement(TypedefStructStatement):
                     scope
                     type_id
                     (comma scope type_id)*
-                   )?"""
+                   )? semicolon? $"""
 
     def hook_id(self, ast):
         TypedefStructStatement.hook_id(self, ast)
@@ -473,29 +499,36 @@ class VarDeclStatement(ExprStatement, ClassDeclStatement):
         #                            initialization=self.initialization)
 
 
-class VarDeclAnonStrucStatement(VarDeclStatement):
+class VarDeclStrucStatement(VarDeclStatement):
     tag = 'var'
-    recognize = '#key:(kw_struct|kw_union)$'
+    recognize = '#key:(kw_struct|kw_union) #tid:symbol?$'
     absorb_post = ("""ref_deref*
-                      #id:symbol
-                      (comma ref_deref* #id:symbol)*
+                      (#id:symbol (comma ref_deref* #id:symbol)*)?
                       semicolon""",)
+    descriptors = {'name': None, 'type': None, 'initialization': None,
+                   'names': []}
 
     def pre_sub(self):
         #print "PRE SUB VarDeclAnonStrucStatement"
-        self.ns_name = anon()
+        #self.ns_name = anon()
         #self.ns = Namespace(self.ns_name, Namespace.current())
-        self.ns = namespace.enter(self.ns_name, key=self.ns_key)
         self.type = (('symbol', self.ns_name),)
+        namespace.add_type(self.type, ns=self.ns_name)
+        self.ns = namespace.enter(self.ns_name, key=self.ns_key)
         #Namespace.current().add_type(self.type, ns=self.ns_name)
         #Namespace.current().add_namespace(self.ns)
         #self.ns.enter()
 
     def hook_key(self, ast):
         self.ns_key = ast.tokens[0][1]
+        print "key", self.ns_key
+
+    def hook_tid(self, ast):
+        print "tid", ast
+        self.ns_name = len(ast.tokens) and ast.tokens[-1][1] or anon()
 
     def hook_id(self, ast):
-        self.name = ast.tokens
+        self.names.append(ast.tokens)
 
     def post_sub(self):
         #print "POST SUB VarDeclAnonStrucStatement"
@@ -504,16 +537,18 @@ class VarDeclAnonStrucStatement(VarDeclStatement):
 
     def commit(self):
         self.ns.key = self.ns_key
-        VarDeclStatement.commit(self)
+        for self.name in self.names:
+            VarDeclStatement.commit(self)
         #Namespace.current().add_var(self.name, type=self.ns_name)
-        namespace.add_type(self.type, ns=self.ns_name)
-        namespace.add_var(self.name, type=self.type)
+        #namespace.add_var(self.name, type=self.type)
 
 
 class FuncDeclStatement(CppStatement):
     tag = 'func'
     recognize = '^func_decl'
     descriptors = {'name': '', 'params': []}
+    absorb_post = []
+    absorb = []
 
     def hook_param(self, ast):
         self.params.append(ast)
