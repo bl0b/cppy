@@ -108,7 +108,7 @@ class TokenizerException(Exception):
     pass
 
 
-def tokenize_iter(text):
+def tokenize_iter(text, token_re, discard_names={}, discard_values={}):
     pos = 0
     while True:
         m = token_re.match(text, pos)
@@ -125,4 +125,6 @@ def tokenize_iter(text):
         raise TokenizerException(msg)
 # End of adapted code
 
-tokenize = lambda t: list(tokenize_iter(t))
+tokenize = lambda t: list(tokenize_iter(t, token_re,
+                                        discard_names,
+                                        discard_values))

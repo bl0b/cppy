@@ -284,19 +284,6 @@ class ProxyExpr(TokenExpr):
         #ok and g and map(lambda grp: publisher(*grp), g)
         return ok, i
 
-        #if self.cache is not ne:
-        #    print "Proxy", self, "makes new copy of '%s'" % ne
-        #    print "      in cache", id(self.cache), "expr", id(ne)
-        #    self.cache = ne
-        #    self.e = self.cache.copy()
-        #    self.e.amin = self.amin
-        #    self.e.amax = self.amax
-        #pub, g = make_publisher()
-        #ok, end = self.e.match(l, i, pub)
-        #ok and g and map(lambda grp: publisher(*grp), g)
-        #ok and self.publish and publisher(self.publish, l[i:end])
-        #return ok, end
-
     def __eq__(self, e):
         streq = str.__eq__(self, e)
         if isinstance(e, ProxyExpr):

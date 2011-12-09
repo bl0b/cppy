@@ -2,10 +2,13 @@ import cppy
 from itertools import ifilter
 from cppy import namespace as ns
 
+from cppy import item
+
 mb = ('namespace_member', '::')
 s = lambda x: ('symbol', x)
 
-test = open('tests/demo.i')
+if False:
+    test = open('tests/demo.i')
 
 recognize = cppy.statements.CppMeta.recognize
 
@@ -33,7 +36,7 @@ if False:
     }
     """
 
-if True:
+if False:
     t = lambda x, e: cppy.match(cppy.tokenize(x), '#capture:(%s)' % e)
     c = cppy.Cpp(test)
     #c = cppy.Cpp(open('tests/hello.c'))
