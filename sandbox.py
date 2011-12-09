@@ -1,11 +1,27 @@
 import cppy
-from itertools import ifilter
+from itertools import ifilter, imap, izip
 from cppy import namespace as ns
 
 from cppy import item
 
 mb = ('namespace_member', '::')
 s = lambda x: ('symbol', x)
+
+grammar = """
+start = decl
+decl = type var_list semicolon
+type = symbol
+ref_deref = ref_deref star
+var = symbol
+var = ref_deref symbol
+var_list = var
+var_list = var_list comma var
+ref_deref = star
+"""
+
+lr = item.parser('start', grammar)
+
+T = cppy.tokenize('int foobar, * pouet;')
 
 if False:
     test = open('tests/demo.i')
