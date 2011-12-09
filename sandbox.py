@@ -1,27 +1,57 @@
 import cppy
-from itertools import ifilter, imap, izip
+from itertools import ifilter, imap, izip, chain
 from cppy import namespace as ns
 
 from cppy import item
+import re
 
-mb = ('namespace_member', '::')
-s = lambda x: ('symbol', x)
 
-grammar = """
-start = decl
-decl = type var_list semicolon
-type = symbol
-ref_deref = ref_deref star
-var = symbol
-var = ref_deref symbol
-var_list = var
-var_list = var_list comma var
-ref_deref = star
-"""
+def make_tokenizer(**tokens):
+    if 'discard_names' in tokens:
+        discard_names = tokens['discard_names']
+        del tokens['discard_names']
+    else:
+        discard_names = []
+    if 'discard_values' in tokens:
+        discard_values = tokens['discard_values']
+        del tokens['discard_values']
+    else:
+        discard_values = []
+    big_re = re.compile('|'.join('(?P<%s>%s)' % (k, v)
+                      for k, v in tokens.iteritems()), re.VERBOSE)
 
-lr = item.parser('start', grammar)
+    def _t(text):
+        return cppy.tokenizer.tokenize_iter(text, big_re,
+                                            discard_names, discard_values)
+    return _t
 
-T = cppy.tokenize('int foobar, * pouet;')
+
+if True:
+    lr = item.parser('S', 'S = a S b S  S = a')
+    tokenizer = make_tokenizer(a='a', b='b')
+
+    def parse(text):
+        return lr.recognize(chain(tokenizer(text), [('$', '$')]))
+
+if False:
+    mb = ('namespace_member', '::')
+    s = lambda x: ('symbol', x)
+
+    grammar = """
+    start = decl
+    decl = type var_list semicolon
+    type = symbol
+    ref_deref = ref_deref star
+    var = symbol
+    var = ref_deref symbol
+    var_list = var
+    var_list = var_list comma var
+    ref_deref = star
+    """
+
+    lr = item.parser('start', grammar)
+
+    T = cppy.tokenize('int foobar, * pouet;')
 
 if False:
     test = open('tests/demo.i')

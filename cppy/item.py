@@ -8,6 +8,22 @@ token_re = re.compile(r"[ \t\n]*(?:(?P<word>\w+)|(?P<sep>=))[ \t\n]*",
                       re.VERBOSE)
 
 
+def itemstr(item):
+    e, i, n = item
+    return ("[%s -> %s . %s" %
+                (n, ' '.join(e[:i]), ' '.join(e[i:]))).strip() + ']'
+
+
+def itemsetstr(itemset, label=''):
+    items = map(itemstr, sorted(itemset))
+    width = reduce(lambda a, b: max(a, len(b)), items, 3)
+    label = label and '[' + str(label) + ']' or ''
+    build = ["+-%s%s-+" % (label, '-' * (width - len(label)))]
+    build.extend("| %-*s |" % (width, item) for item in items)
+    build.append("+-" + "-" * width + '-+')
+    return '\n'.join(build)
+
+
 def rules(start, grammar, kw):
     words = [start]
     edit_rule = '@'
@@ -52,12 +68,12 @@ def first(itemset, ruleset):
         e = ruleelems[i]
         if not e in ruleset:
             ret.add(e)
-        #else:
-        #   ret.update(first(((elems, 0, e) for elems in ruleset[e]), ruleset))
     return ret
 
 
 def follow(itemset, ruleset):
+    print "FOLLOW FOR:"
+    print itemsetstr(itemset)
     ret = dict()
     for ruleelems, i, rulename in itemset:
         if i == len(ruleelems):
@@ -66,6 +82,9 @@ def follow(itemset, ruleset):
         if e not in ret:
             ret[e] = set()
         ret[e].update(closure([(ruleelems, i + 1, rulename)], ruleset))
+    for k, v in ret.iteritems():
+        print '', k, '->'
+        print itemsetstr(v)
     return ret
 
 
@@ -197,7 +216,7 @@ class parser(object):
             if i >= 0:
                 return ','.join(map(ac_str, self.ACTION[i][kw]))
             if i < 0:
-                return str(kw)
+                return kw != '@' and str(kw) or ''
 
         def col_width(kw):
             return reduce(max, chain([type(kw) is str and len(kw) or kw],
@@ -205,10 +224,10 @@ class parser(object):
                                       for i in xrange(len(self.ACTION)))))
 
         col_labels = sorted(self.kw_set,
-                            key=lambda x: type(x) is int and '|' + str(x)
+                            key=lambda x: x in self.R and '|' + x
                                           or x == '$' and '|$'
                                           or x)
-        col_widths = [col_width(kw) for kw in col_labels]
+        col_widths = [kw != '@' and col_width(kw) or 0 for kw in col_labels]
 
         def row(i):
             return ' | '.join(cell(i, kw).center(cw)
@@ -222,27 +241,38 @@ class parser(object):
 
         class Automaton(object):
 
-            def __init__(self, initial_state):
+            def __init__(self, initial_state, ACTION):
                 self.toki = iter(tokens)
                 self.state_stack = [initial_state]
                 self.input_stack = []
+                self.AC = ACTION
                 self.next_token()
 
             def next_token(self):
                 self.input_stack.append(self.toki.next())
+                print "NEXT TOKEN", self.input_stack
 
             def shift(self, next_state):
+                print "SHIFT", next_state
                 self.state_stack.append(next_state)
                 self.next_token()
 
             def reduce(self, name, count):
+                print "REDUCE", name, "(%i)" % count
                 self.state_stack = self.state_stack[: - count]
-                self.input_stack = self.input_stack[: - count]
+                self.input_stack = self.input_stack[: - count] + [(name,)]
+                goto = self.AC[self.state][name]
+                #self.shift(goto[0][1])
+                self.state_stack.append(goto[0][1])
 
-        A = Automaton(self.initial_state)
+            state = property(lambda s: s.state_stack[-1])
+            input = property(lambda s: s.input_stack[-1])
+
+        A = Automaton(self.initial_state, self.ACTION)
+        output = []
 
         while True:
-            ac = self.ACTION[A.state_stack[-1]][A.input_stack[-1]]
+            ac = self.ACTION[A.state][A.input[0]]
             print ac
             if len(ac) == 0:
                 print "ERROR", A.state_stack, A.input_stack
@@ -253,13 +283,17 @@ class parser(object):
             ac = ac[0]
             if ac[0] == 'R':
                 A.reduce(ac[1][2], ac[1][1])
-                goto = self.ACTION[A.state_stack[-1]][ac[1][2]]
-                print "goto", goto
-                A.state_stack.append(goto[0][1])
+                output.append(ac[1])
             elif ac[0] == 'S':
                 A.shift(ac[1])
             elif ac[0] == 'A':
                 print "DONE"
                 break
-            print A.state_stack, A.input_stack
-        return A
+            #print A.state_stack, A.input_stack
+        return output
+
+    def dump_sets(self):
+        for i, lrset in enumerate(self.LR0):
+            print itemsetstr(lrset, i)
+            print
+#
