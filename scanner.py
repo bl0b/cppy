@@ -16,7 +16,7 @@ keywords = [
     'void', 'inline', 'sizeof', 'enum', '__typeof', '__typeof__', 'typename',
     'const', '__const', 'static', 'register', 'volatile', 'virtual', 'extern',
     'long', 'short', 'signed', 'unsigned', 'friend', 'public', 'private',
-    'protected',
+    'protected', 'int', 'float', 'double', 'char'
 ]
 
 
