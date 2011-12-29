@@ -1,3 +1,11 @@
+#!/usr/bin/ipython -i
+from parser import cppy
+
+sys.exit(0)
+
+
+
+
 import cppy
 from itertools import ifilter, imap, izip, chain
 from cppy import namespace as ns

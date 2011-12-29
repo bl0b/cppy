@@ -16,7 +16,7 @@ keywords = [
     'void', 'inline', 'sizeof', 'enum', '__typeof', '__typeof__', 'typename',
     'const', '__const', 'static', 'register', 'volatile', 'virtual', 'extern',
     'long', 'short', 'signed', 'unsigned', 'friend', 'public', 'private',
-    'protected', 'int', 'float', 'double', 'char'
+    'protected', 'int', 'float', 'double', 'char', 'bool', 'this', 'wchar_t',
 ]
 
 
@@ -26,7 +26,7 @@ def kw_to_dic(kw):
         kw = kw[2:]
     if kw.endswith('__'):
         kw = kw[:-2]
-    return 'kw_' + kw, raw_kw
+    return kw.upper(), raw_kw
 
 kw_dic = {}
 
@@ -42,52 +42,39 @@ for k, v in kw_dic.iteritems():
     kw_dic[k] = r'\b(?:%s)\b' % v
 
 
-def assert_not_group(name):
-    return "(?!(?P=%s))" % name
-
-#symbol_assert = ''.join(assert_not_group(i) for i in tokens.iterkeys())
-
-misc = dict(plus='+', minus='-', star='*', div='/',
-            inf='<', sup='>',
-            bitand='&', bitor='|', bitneg='~', bitxor='^',
-            boolnot='!',
-            lshift='<<', rshift='>>',
-            pluseq='+=', minuseq='-=', muleq='*=', diveq='/=', modeq='%=',
-            infeq='<=', supeq='>=', eq='==', neq='!=',
-            booland="&&", boolor="||",
-            lshifteq='<<=', rshifteq='>>=',
-            comma=',',
-            assign='=',
-            colon=':',
-            namespace_member='::',
-            semicolon=';',
-            open_paren='(',
-            close_paren=')',
-            open_curly='{',
-            close_curly='}',
-            mod='%',
-            open_square='[',
-            close_square=']',
-            ellipsis='...',
-            access='.',
-            access_ptr='->',
-            access_ptr_method='->*',
-            access_method='.*',
-            question_mark='?',
+misc = dict(PLUS='+', MINUS='-', STAR='*', SLASH='/',
+            INF='<', SUP='>',
+            AMPERSAND='&', PIPE='|', TILDE='~', CIRCONFLEX='^',
+            EXCLAMATION='!',
+            SHL='<<', SHR='>>',
+            ASS_ADD='+=', ASS_SUB='-=', ASS_MUL='*=', ASS_DIV='/=',
+            ASS_MOD='%=',
+            LE='<=', GE='>=', EQ='==', NE='!=',
+            LOG_AND="&&", LOG_OR="||",
+            ASS_SHL='<<=', ASS_SHR='>>=',
+            COMMA=',',
+            EQUAL='=',
+            COLON=':',
+            SCOPE='::',
+            SEMICOLON=';',
+            OPEN_PAR='(',
+            CLOSE_PAR=')',
+            OPEN_CURLY='{',
+            CLOSE_CURLY='}',
+            PERCENT='%',
+            OPEN_SQ='[',
+            CLOSE_SQ=']',
+            ELLIPSIS='...',
+            DOT='.',
+            ARROW='->',
+            ARROW_STAR='->*',
+            DOT_STAR='.*',
+            QUESTION='?',
            )
 
 one_char = dict((k, v) for k, v in misc.iteritems() if len(v) == 1)
 two_char = dict((k, v) for k, v in misc.iteritems() if len(v) == 2)
 three_char = dict((k, v) for k, v in misc.iteritems() if len(v) == 3)
-
-
-#def filter_asserts(needle, dic):
-#    return filter(lambda k: dic[k].startswith(needle), dic.iterkeys())
-
-
-#def mk_op_re(op, asserts):
-#    return '%s[%s]' % (''.join(assert_not_group(g) for g in asserts),
-#                       ']['.join(op))
 
 
 def escape(c):
