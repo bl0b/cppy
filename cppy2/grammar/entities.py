@@ -9,9 +9,9 @@ class Entity(object):
 
     def __init__(self, name, scope):
         self.name = name
-        self.scope = scope
-        if name:
-            self.scope.contents[name] = self
+        self.owner = scope
+        if name and self.owner:
+            self.owner.contents[name] = self
 
     def match_specialization(self, params):
         return None
@@ -19,20 +19,35 @@ class Entity(object):
     def resolve(self, sym, local):
         return None
 
+    def __str__(self):
+        return type(self).__name__ + '(' + str(self.name) + ')'
 
-class Scope(Entity, dict):
+    __repr__ = __str__
+
+
+class Scope(Entity):
     """A C++ scope, namespace or local scope."""
+    tag = 'S'
 
-    def __init__(self, name=None, parent=None):
-        Entity.__init__(self, name, parent)
+    def __init__(self, name=None, owner=None):
+        Entity.__init__(self, name, owner)
         self.contents = {}
 
     def resolve(self, sym, local):
         if sym in self.contents:
             return self.contents[sym]
-        elif self.parent and not local:
-            return self.parent.resolve(sym, False)
+        elif self.owner and not local:
+            return self.owner.resolve(sym, False)
         return None
+
+    def __hash__(self):
+        return hash(id(self))
+
+    def __str__(self):
+        return ''.join((type(self).__name__, '(', repr(self.name), ', ',
+                        str(self.contents.values()), ')'))
+
+    __repr__ = __str__
 
 
 class Namespace(Scope):
@@ -45,6 +60,10 @@ class Variable(Entity):
 
 class Type(Scope):
     is_type = True
+
+    def __init__(self, name, scope, data):
+        Scope.__init__(self, name, scope)
+        self.data = data
 
 
 class Function(Scope):

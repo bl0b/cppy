@@ -1,6 +1,7 @@
+from main_grammar import register
 # see http://en.cppreference.com/w/cpp/language/operator_precedence
 
-expr_grammar = """
+register(expr_grammar="""
 _MARK_UPD=
 _MARK_READ=
 _MARK_SET=
@@ -130,4 +131,4 @@ expr_p18 = expr_p18 COMMA expr_p17
 -expr_list
     = expr_list COMMA expr_no_comma
     | expr_no_comma
-"""
+""")

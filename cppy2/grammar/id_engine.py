@@ -1,147 +1,76 @@
+from main_grammar import register, validator
 from entities import *
 
 
-root_namespace = scope()
-current = root
+root_namespace = Namespace('')
+current = root_namespace
 
 
-class searcher(object):
-    stack = []
-
-    def __init__(self):
-        self.cur = current
-        self.local = False
-
-    def _from_root(self):
-        self.cur = root
-        self.local = True
-
-    def _resolve(self, sym):
-        self.cur = self.cur.resolve(sym, self.local)
-        if self.cur is None:
-            return False
-        self.local = False
-        return True
-
-    def _match_specialization(cls, params):
-        self.cur = self.cur.match_specialization(params)
-
-    @classmethod
-    def new(cls):
-        cls.stack.append(cls())
-
-    @classmethod
-    def destroy(cls):
-        cls.stack.pop()
-
-    @classmethod
-    def from_root(cls):
-        cls.stack[-1]._from_root()
-
-    @classmethod
-    def resolve(cls):
-        cls.stack[-1]._resolve()
-
-    @property
-    def is_namespace(cls):
-        return cls.stack[-1].cur.is_namespace
-
-    @property
-    def is_type(cls):
-        t = cls.stack[-1].cur
-        return t.is_type and not t.is_template
-
-    @property
-    def is_template_type(cls):
-        t = cls.stack[-1].cur
-        return t.is_type and t.is_template
-
-    @property
-    def is_const(cls):
-        return cls.stack[-1].cur.is_const
-
-    @property
-    def is_var(cls):
-        return cls.stack[-1].cur.is_var
-
-    @classmethod
-    def assert(cls, what):
-        if not getattr(cls, what):
-            cls.destroy()
-            return False
-        return True
-
-    @classmethod
-    def match_specialization(cls, params):
-        cls.stack[-1]._match_specialization(params)
-
-    assert_var = lambda c: c.assert('is_var')
-    assert_type = lambda c: c.assert('is_type')
-    assert_const = lambda c: c.assert('is_const')
-    assert_namespace = lambda c: c.assert('is_namespace')
-    assert_template_type = lambda c: c.assert('is_template_type')
+@validator
+def _SEARCH_FROM_HERE(ast):
+    return current.resolve(ast[1][1], False)
 
 
-def _START_BUILD():
-    searcher.new()
+@validator
+def _SEARCH_FROM_ROOT(ast):
+    return root_namespace
 
 
-def _BUILD_FROM_ROOT():
-    searcher.from_root()
+@validator
+def _ASSERT_VAR(ast):
+    return ast[1].is_var and ast[1] or None
 
 
-def _ASSERT_VAR():
-    return searcher.assert_var()
+@validator
+def _ASSERT_TYPE(ast):
+    return ast[1].is_type and ast[1] or None
 
 
-def _ASSERT_TYPE():
-    return searcher.assert_type()
+@validator
+def _ASSERT_CONST(sym):
+    return ast[1].is_const and ast[1] or None
 
 
-def _ASSERT_CONST():
-    return searcher.assert_const()
+@validator
+def _ASSERT_TEMPLATE_TYPE(sym):
+    return ast[1].is_template and ast[1] or None
 
 
-def ID(sym):
-    return searcher.resolve(sym)
+@validator
+def _ASSERT_FUNC(ast):
+    return ast[1].is_function and ast[1] or None
 
 
-def NAMESPACE_NAME(sym):
-    if not searcher.resolve(sym):
-        return False
-    return searcher.assert_namespace()
+@validator
+def path(ast):
+    scope = ast[1]
+    if len(ast) == 2:
+        return scope
+    sym = ast[3][1]
+    return scope.resolve(sym)
 
 
-def TYPE(sym):
-    if not searcher.resolve(sym):
-        return False
-    return searcher.assert_type()
+@validator
+def any_path(ast):
+    scope = ast[1]
+    sym = ast[2][1]
+    return scope.resolve(sym, True)
 
 
-def TEMPLATE_TYPE(sym, params):
-    if searcher.resolve(sym) and searcher.assert_template_type():
-        searcher.match_specialization(params)
-        return True
-    return False
-#
+register(id_grammar="""
+_ASSERT_VAR   = any_path
+_ASSERT_TYPE  = any_path
+_ASSERT_CONST = any_path
+_ASSERT_FUNC  = any_path
+_ASSERT_TEMPLATE_TYPE = INF
+_SEARCH_FROM_ROOT = SCOPE
+_SEARCH_FROM_HERE = symbol
 
-id_grammar = """
-_START_BUILD=
-_ASSERT_VAR=
-_ASSERT_TYPE=
-_ASSERT_CONST=
-_BUILD_FROM_ROOT=
-
-ID  = symbol
-
-NAMESPACE_NAME
-    = symbol
-
-TEMPLATE_TYPE
-    = symbol INF template_expr_list SUP
-
-TYPE
-    = symbol
+ID             = symbol
+OPT_ID         =| symbol
+NAMESPACE_NAME = symbol
+TEMPLATE_TYPE  = symbol _ASSERT_TEMPLATE_TYPE template_expr_list SUP
+TYPE           = symbol
 
 template_expr_list
     = template_expr_list COMMA template_expr
@@ -151,11 +80,11 @@ template_expr
     = any_type
     | expr
 
-any_type
+-any_type
     = type_or_pointer_type
     | type_id AMPERSAND
 
-type_or_pointer_type
+-type_or_pointer_type
     = type_or_pointer_type STAR
     | type_id
 
@@ -165,22 +94,73 @@ container
     | TYPE
 
 var_id
-    = _START_BUILD any_path SCOPE ID _ASSERT_VAR
-    | _START_BUILD ID _ASSERT_VAR
+    = _ASSERT_VAR
 
 const_id
-    = _START_BUILD any_path SCOPE ID _ASSERT_CONST
-    | _START_BUILD ID _ASSERT_CONST
+    = _ASSERT_CONST
 
-type_id
-    = _START_BUILD any_path
+-type_id
+    = _ASSERT_TYPE opt_specialization
+    | builtin_type
 
--any_path
-    = SCOPE _BUILD_FROM_ROOT path
-    | path
+-builtin_type
+    = int_type
+    | CHAR
+    | SIGNED CHAR
+    | UNSIGNED CHAR
+    | FLOAT
+    | DOUBLE
+    | LONG DOUBLE
+    | BOOL
+    | WCHAR_T
+
+any_path
+    = _SEARCH_FROM_ROOT path
+    | _SEARCH_FROM_HERE SCOPE path
+    | _SEARCH_FROM_HERE
 
 path
-    = path SCOPE container
-    | container
+    = path SCOPE symbol
+    | symbol
 
+""",
+
+#int_type="""
+#int_type
+#    = INT
+#    | UNSIGNED INT
+#    | SIGNED INT
+#    | LONG INT
+#    | UNSIGNED LONG INT
+#    | LONG UNSIGNED INT
+#    | SIGNED LONG INT
+#    | LONG SIGNED INT
+#    | LONG LONG INT
+#    | UNSIGNED LONG LONG INT
+#    | LONG LONG UNSIGNED INT
+#    | SIGNED LONG LONG INT
+#    | LONG LONG SIGNED INT
+#    | UNSIGNED
+#    | SIGNED
+#    | LONG
+#    | UNSIGNED LONG
+#    | LONG UNSIGNED
+#    | SIGNED LONG
+#    | LONG SIGNED
+#    | LONG LONG
+#    | UNSIGNED LONG LONG
+#    | LONG LONG UNSIGNED
+#    | SIGNED LONG LONG
+#    | LONG LONG SIGNED
+#"""
+int_type="""
+int_type
+    = int_attr_list
+
+-int_attr_list
+    = int_attr_list int_attr
+    | int_attr
+
+-int_attr = SIGNED | UNSIGNED | LONG | SHORT | INT
 """
+)
