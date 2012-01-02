@@ -1,15 +1,14 @@
 from main_grammar import register, validator
-#from id_engine import current
 import id_engine
-from entities import Type, Namespace, TemplateType
+from entities import Type, Namespace, TemplateType, Entity, Scope
+from entities import TemplateFreeConst, TemplateFreeType
 
 
 @validator
 def typedef(ast):
     sym = ast[-2][1]
     typ = ast[-3]
-    ret = Type(sym, id_engine.current, typ)
-    print id_engine.current
+    ret = Type(sym, id_engine.current(), typ)
     return ret
 
 
@@ -21,14 +20,13 @@ def int_type(ast):
 @validator
 def _NAMESPACE_ENTER(ast):
     sym = ast[1][1]
-    n = id_engine.current.resolve(sym, True)
+    n = id_engine.resolve(sym, True)
     print "enter namespace ?", n
-    if n is None:
-        n = Namespace(sym, id_engine.current)
+    if n is Entity.Null:
+        n = Namespace(sym, id_engine.current())
         print "new namespace !", n
-    id_engine.current = n
-    print "root :", id_engine.root_namespace
-    return id_engine.current
+    id_engine.enter(n)
+    return id_engine.current()
 
 
 @validator
@@ -39,15 +37,47 @@ def gcc_attribute(ast):
 @validator
 def template_type_decl_prefix(ast):
     free_params = []
-    for x in ast[1:]:
-        if x[0] == 'symbol':
-            sym = x[1]
-        if x[0] == 'template_param_decl':
-            free_params.append(x[1:])
-    return TemplateType(sym, id_engine.current, {
-        'free_params': free_params,
+    print ast
+    #for x in ast[2:]:
+    #    if x[0] == 'symbol':
+    #        sym = x[1]
+    decl = ast[-1]
+    sym = decl[-1][1]
+    kw = decl[-2][1]
+    ret = TemplateType(sym, id_engine.current(), {
+        'kw': kw,
+        'free_params': ast[1],
         'bound_params': []
     })
+    id_engine.enter(ret)
+    return ret
+
+
+@validator
+def template_free_param_list(ast):
+    print "T_FPL", ast
+    scope = ast[1]
+    if len(ast) == 2:
+        return scope
+    param = ast[-1]
+    if param[0] == 'template_free_type':
+        cls = TemplateFreeType
+    else:
+        cls = TemplateFreeConst
+    kw = param[1][1]
+    sym = param[2][1]
+    if len(param) == 4:
+        default = param[3]
+    else:
+        default = None
+    cls(sym, scope, kw, default)
+    return scope
+
+
+@validator
+def template_param_decl(ast):
+    print "template_param_decl", ast
+    return ast
 
 
 @validator
@@ -59,13 +89,13 @@ def specialization_decl(ast):
 
 @validator
 def _FORWARD_DECL(ast):
-    id_engine.current = id_engine.current.owner
+    id_engine.leave()
     return ast
 
 
 @validator
 def _LEAVE_SCOPE(ast):
-    id_engine.current = id_engine.current.owner
+    id_engine.leave()
     return ast
 
 
@@ -75,17 +105,74 @@ def using_decl(ast):
         print "TODO ! import namespace"
     else:
         what = ast[2]
-        id_engine.current.contents[what.name] = what
+        id_engine.add(what)
+        print "Imported", what.full_path, "in", id_engine.current().full_path
     return tuple()
 
+
+@validator
+def enter_template_free_params(ast):
+    ret = Scope(None, id_engine.current())
+    id_engine.enter(ret)
+    return ret
+
+
+@validator
+def template_param_decl(ast):
+    print "TODO: declare TemplateParam (TODO: write TemplateParam class)"
+    print "TODO: make template parameters scope an ordered list also"
+    return ast
+
+
+@validator
+def leave_template_free_params(ast):
+    id_engine.leave()
+    return ast[-2:]
+
+
+_anon_counter = 0
+
+
+def make_anon():
+    global _anon_counter
+    _anon_counter += 1
+    return 'anonymous_' + str(_anon_counter)
+
+
+@validator
+def _ENTER_STRUC(ast):
+    if ast[2][0] == 'symbol':
+        sym = ast[2][1]
+        ret = id_engine.resolve(sym)
+    else:
+        sym = make_anon()
+        ret = Entity.Null
+    if ret is Entity.Null:
+        ret = Type(sym, id_engine.current(), None)
+    id_engine.enter(ret)
+    return ret
+
+
+def _MARK_STRUC(ast):
+    if ast[2][0] == 'symbol':
+        sym = ast[2][1]
+    else:
+        sym = make_anon()
+    ret = id_engine.resolve(sym)
+    if ret is Entity.Null:
+        ret = Type(sym, id_engine.current(), None)
+    id_engine.enter(ret)
+    return ret
 
 register(
 toplevel="""
 _NAMESPACE_ENTER        = symbol
 _FUNC_NAME              = symbol
 _LEAVE_SCOPE            = CLOSE_CURLY
-_MARK_STRUC             = s_c_u OPT_ID
-TEMPLATE_TYPE           = _STRUC_ENTER            =
+_ENTER_STRUC            = s_c_u symbol OPEN_CURLY
+                        | s_c_u OPEN_CURLY
+_MARK_STRUC             = s_c_u symbol
+                        | s_c_u
 _STRUC_LEAVE            =
 -s_c_u                  = CLASS | STRUCT | UNION
 
@@ -137,7 +224,17 @@ func_compile_spec
 func_compile_spec1 = INLINE | STATIC | EXTERN
 
 func_signature
-    = any_type func_id OPEN_PAR func_param_list_opt CLOSE_PAR
+    = any_type func_id OPEN_PAR func_param_list_opt CLOSE_PAR opt_throw_spec
+
+opt_throw_spec
+    =| THROW OPEN_PAR opt_type_list CLOSE_PAR
+
+opt_type_list
+    =| type_list
+
+-type_list
+    = type_list COMMA any_type
+    | any_type
 
 func_ptr_signature
     = any_type OPEN_PAR opt_type STAR OPT_ID CLOSE_PAR
@@ -180,15 +277,20 @@ var_decl
     | single_var_decl
 
 single_var_decl
-    = single_var opt_var_init
+    = single_var
+    | single_var EQUAL var_init
+
+single_var_base
+    = modifier symbol
+    | symbol
+
+modifier
+    = AMPERSAND
+    | stars
 
 single_var
-    = AMPERSAND symbol
-    | symbol
-    | stars symbol
-
--opt_init
-    =| EQUAL var_init
+    = single_var subscript
+    | single_var_base
 
 var_init
     = expr
@@ -219,10 +321,22 @@ typedef
     | TYPEDEF any_type symbol SEMICOLON
 
 struc_type_decl
-    = _MARK_STRUC opt_struc_body
+    = _ENTER_STRUC translation_unit _LEAVE_SCOPE
+    | _MARK_STRUC
 
 template_type_decl_prefix
-    = TEMPLATE INF opt_template_param_decl_list SUP s_c_u symbol
+    = template_free_param_list leave_template_free_params
+
+template_free_param_list
+    = template_free_param_list COMMA template_param_decl
+    | enter_template_free_params template_param_decl
+    | enter_template_free_params
+
+enter_template_free_params
+    = TEMPLATE INF
+
+leave_template_free_params
+    = SUP s_c_u symbol
 
 specialization_decl
     = template_type_decl_prefix template_specialization
@@ -242,8 +356,20 @@ template_type_decl
     = template_param_decl_list COMMA template_param_decl
     | template_param_decl
 
-template_param_decl
-    = tp_kw symbol opt_tp_default
+-template_param_decl
+    = template_free_type
+    | template_free_const
+
+template_free_type
+    = TYPENAME symbol opt_tp_default
+    | CLASS symbol opt_tp_default
+    | STRUCT symbol opt_tp_default
+    | UNION symbol opt_tp_default
+
+template_free_const
+    = int_type symbol opt_tp_default
+    | CHAR symbol opt_tp_default
+    | BOOL symbol opt_tp_default
 
 -opt_tp_default
     =| EQUAL template_param_inst

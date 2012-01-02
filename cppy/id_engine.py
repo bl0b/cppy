@@ -1,19 +1,77 @@
+__all__ = ['root', 'current', 'resolve', 'add', 'match_specialization']
+
+
 from main_grammar import register, validator
 from entities import *
 
 
-root_namespace = Namespace('')
-current = root_namespace
+__root = Namespace('')
+__current = __root
+
+
+__cur_stack = []
+
+
+Type('__builtin_va_list', __root, [])
+Function('__builtin_va_start', __root)
+Function('__builtin_va_end', __root)
+Function('__builtin_vsnprintf', __root)
+Function('__builtin_memmove', __root)
+Function('__builtin_memset', __root)
+Function('__builtin_memcmp', __root)
+Function('__builtin_memchr', __root)
+Function('__builtin_memcpy', __root)
+Function('__builtin_strlen', __root)
+Function('__builtin_strcmp', __root)
+Function('__builtin_expect', __root)
+Function('__builtin_alloca', __root)
+
+
+def enter(into_what):
+    global __current
+    __cur_stack.append(__current)
+    __current = into_what
+
+
+def leave():
+    global __current
+    __current = __cur_stack.pop()
+
+
+def current():
+    global __current
+    return __current
+
+
+def root():
+    global __root
+    return __root
+
+
+def resolve(what, local=True):
+    global __current
+    return __current.resolve(what, local)
+
+
+def add(what):
+    global __current
+    return __current.add(what)
+
+
+def match_specialization(*a, **kw):
+    global __current
+    return __current.match_specialization(*a, **kw)
 
 
 @validator
 def _SEARCH_FROM_HERE(ast):
-    return current.resolve(ast[1][1], False)
+    print "Searching from", __current,
+    return __current.resolve(ast[1][1], False)
 
 
 @validator
 def _SEARCH_FROM_ROOT(ast):
-    return root_namespace
+    return __root
 
 
 @validator
@@ -27,7 +85,7 @@ def _ASSERT_TYPE(ast):
 
 
 @validator
-def _ASSERT_CONST(sym):
+def _ASSERT_CONST(ast):
     return ast[1].is_const and ast[1] or None
 
 
@@ -53,6 +111,8 @@ def path(ast):
 @validator
 def any_path(ast):
     scope = ast[1]
+    if len(ast) == 2:
+        return scope
     sym = ast[2][1]
     return scope.resolve(sym, True)
 

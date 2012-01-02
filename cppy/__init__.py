@@ -14,11 +14,16 @@ from scanner import cpp_scanner
 from time import time
 
 
+@property
+def test():
+    return "TOTO !"
+
+
 class CppParser(Automaton):
 
-    def __init__(self):
+    def __init__(self, start='translation_unit'):
         t0 = time()
-        Automaton.__init__(self, 'translation_unit', grammar, cpp_scanner)
+        Automaton.__init__(self, start, grammar, cpp_scanner)
         t1 = time()
         self.build_time = t1 - t0
         self.debug = True
@@ -28,6 +33,7 @@ class CppParser(Automaton):
             print "VALIDATING", ast, "=>",
             ret = main_grammar.validators[ast[0]](ast)
             print ret
+            print 'ROOT', id_engine.root()
             return ret
         else:
             print "AST", ast
@@ -38,4 +44,5 @@ cpp = CppParser()
 
 print "Built parser in", cpp.build_time, 'seconds'
 print "Unused rules :", cpp.unused_rules
+cpp.resolve_SR_conflicts()
 print len(cpp.conflicts()), "conflicts."

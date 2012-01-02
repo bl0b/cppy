@@ -100,10 +100,13 @@ for k, op in three_char.iteritems():
 #tokens['number'] = number
 #tokens['symbol'] = symbol_assert + r'\b[a-zA-Z_][a-zA-Z0-9_]*\b'
 
+discard_them_all = ['RESTRICT', 'CONST']
+
 cpp_scanner = Scanner(**kw_dic).add(**three_char) \
                 .add(**two_char).add(**one_char) \
                 .add(symbol=r'\b[a-zA-Z_][a-zA-Z0-9_]*\b') \
                 .add(hex=hexnum).add(number=number) \
                 .add(string=r'"(?:\\["bntr]|[^\\"])*"') \
                 .add(char=r"'(?:\\['bntr\\]|[^\\'])'") \
-                .add(ws='[ \t\n]+', discard_names=('ws',))
+                .add(ws='[ \t\n]+', discard_names=('ws',)) \
+                .add(discard_names=discard_them_all)

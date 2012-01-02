@@ -24,12 +24,19 @@ cast_op = CONST_CAST | DYNAMIC_CAST | STATIC_CAST | REINTERPRET_CAST
 expr_p2
     = expr_p2 INC _MARK_UPD
     | expr_p2 DEC _MARK_UPD
-    | expr_p2
     | expr_p2 subscript _MARK_READ
     | expr_p2 DOT _MARK_READ field_id
     | expr_p2 ARROW _MARK_READ field_id
     | typeid
     | cpp_cast _MARK_CAST call _RESOLVE_CAST
+
+subscript
+    = OPEN_SQ expr CLOSE_SQ
+    | OPEN_SQ CLOSE_SQ
+
+call
+    = OPEN_PAR expr_list CLOSE_PAR
+    | OPEN_PAR CLOSE_PAR
 
 -expr_p3 = expr_p2
 expr_p3
@@ -58,7 +65,7 @@ expr_p5
     | expr_p5 SLASH expr_p4
     | expr_p5 PERCENT expr_p4
 
--expr_p6  expr_p5
+-expr_p6 = expr_p5
 expr_p6
     = expr_p6 PLUS expr_p5
     | expr_p6 MINUS expr_p5
