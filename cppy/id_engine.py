@@ -12,7 +12,7 @@ __current = __root
 __cur_stack = []
 
 
-Type('__builtin_va_list', __root, [])
+Type('__builtin_va_list', __root)
 Function('__builtin_va_start', __root)
 Function('__builtin_va_end', __root)
 Function('__builtin_vsnprintf', __root)
@@ -117,6 +117,106 @@ def any_path(ast):
     return scope.resolve(sym, True)
 
 
+@validator
+def builtin_type(ast):
+    if ast[1][0] == 'int_type':
+        label = 'int-like'
+    else:
+        label = ast[-1][1] + '-like'
+    ret = Type(label, None, None)
+    print ret
+    return ret
+
+
+@validator
+def type_id(ast):
+    print ast
+    if len(ast) == 2:
+        return ast[1]  # that is a type object
+    else:
+        pass
+
+
+@validator
+def type_or_pointer_type(ast):
+    return PointerTo(ast[1])
+
+
+@validator
+def ref_to_type(ast):
+    return ReferenceTo(ast[1])
+
+
+@validator
+def builtin_Bool(ast):
+    return Bool
+
+
+@validator
+def builtin_Wchar_t(ast):
+    return Wchar_t
+
+
+@validator
+def builtin_UnsignedChar(ast):
+    return UnsignedChar
+
+
+@validator
+def builtin_Char(ast):
+    return Char
+
+
+@validator
+def builtin_LongDouble(ast):
+    return LongDouble
+
+
+@validator
+def builtin_Double(ast):
+    return Double
+
+
+@validator
+def builtin_Float(ast):
+    return Float
+
+
+@validator
+def builtin_UnsignedLongLongInt(ast):
+    return UnsignedLongLongInt
+
+
+@validator
+def builtin_UnsignedLongInt(ast):
+    return UnsignedLongInt
+
+
+@validator
+def builtin_LongLongInt(ast):
+    return LongLongInt
+
+
+@validator
+def builtin_LongInt(ast):
+    return LongInt
+
+
+@validator
+def builtin_UnsignedShortInt(ast):
+    return UnsignedShortInt
+
+
+@validator
+def builtin_ShortInt(ast):
+    return ShortInt
+
+
+@validator
+def builtin_Int(ast):
+    return Int
+
+
 register(id_grammar="""
 _ASSERT_VAR   = any_path
 _ASSERT_TYPE  = any_path
@@ -142,11 +242,17 @@ template_expr
 
 -any_type
     = type_or_pointer_type
-    | type_id AMPERSAND
+    | ref_to_type
+
+ref_to_type
+    = type_id AMPERSAND
+
+type_or_pointer_type
+    = type_or_pointer_type STAR
 
 -type_or_pointer_type
-    = type_or_pointer_type STAR
-    | type_id
+    = type_id
+    | int_type
 
 container
     = NAMESPACE_NAME
@@ -159,20 +265,84 @@ var_id
 const_id
     = _ASSERT_CONST
 
--type_id
+type_id
     = _ASSERT_TYPE opt_specialization
     | builtin_type
 
 -builtin_type
-    = int_type
-    | CHAR
+    = builtin_Int
+    | builtin_ShortInt
+    | builtin_UnsignedShortInt
+    | builtin_LongInt
+    | builtin_LongLongInt
+    | builtin_UnsignedLongInt
+    | builtin_UnsignedLongLongInt
+    | builtin_Float
+    | builtin_Double
+    | builtin_LongDouble
+    | builtin_Char
+    | builtin_UnsignedChar
+    | builtin_Bool
+    | builtin_Wchar_t
+
+builtin_Int
+    = INT
+    | SIGNED
+    | SIGNED INT
+
+builtin_ShortInt
+    = SHORT
+    | SIGNED SHORT
+    | SHORT SIGNED
+    | SHORT INT
+    | SIGNED SHORT INT
+    | SHORT SIGNED INT
+
+builtin_UnsignedShortInt
+    = UNSIGNED SHORT
+    | UNSIGNED SHORT INT
+
+builtin_LongInt
+    = LONG
+    | LONG INT
+    | SIGNED LONG
+    | SIGNED LONG INT
+
+builtin_LongLongInt
+    = LONG LONG
+    | LONG LONG INT
+    | SIGNED LONG LONG
+    | SIGNED LONG LONG INT
+
+builtin_UnsignedLongInt
+    = UNSIGNED LONG
+    | UNSIGNED LONG INT
+
+builtin_UnsignedLongLongInt
+    = UNSIGNED LONG LONG
+    | UNSIGNED LONG LONG INT
+
+builtin_Float
+    = FLOAT
+
+builtin_Double
+    = DOUBLE
+
+builtin_LongDouble
+    = LONG DOUBLE
+
+builtin_Char
+    = CHAR
     | SIGNED CHAR
-    | UNSIGNED CHAR
-    | FLOAT
-    | DOUBLE
-    | LONG DOUBLE
-    | BOOL
-    | WCHAR_T
+
+builtin_UnsignedChar
+    = UNSIGNED CHAR
+
+builtin_Wchar_t
+    = WCHAR_T
+
+builtin_Bool
+    = BOOL
 
 any_path
     = _SEARCH_FROM_ROOT path
@@ -183,44 +353,5 @@ path
     = path SCOPE symbol
     | symbol
 
-""",
-
-#int_type="""
-#int_type
-#    = INT
-#    | UNSIGNED INT
-#    | SIGNED INT
-#    | LONG INT
-#    | UNSIGNED LONG INT
-#    | LONG UNSIGNED INT
-#    | SIGNED LONG INT
-#    | LONG SIGNED INT
-#    | LONG LONG INT
-#    | UNSIGNED LONG LONG INT
-#    | LONG LONG UNSIGNED INT
-#    | SIGNED LONG LONG INT
-#    | LONG LONG SIGNED INT
-#    | UNSIGNED
-#    | SIGNED
-#    | LONG
-#    | UNSIGNED LONG
-#    | LONG UNSIGNED
-#    | SIGNED LONG
-#    | LONG SIGNED
-#    | LONG LONG
-#    | UNSIGNED LONG LONG
-#    | LONG LONG UNSIGNED
-#    | SIGNED LONG LONG
-#    | LONG LONG SIGNED
-#"""
-int_type="""
-int_type
-    = int_attr_list
-
--int_attr_list
-    = int_attr_list int_attr
-    | int_attr
-
--int_attr = SIGNED | UNSIGNED | LONG | SHORT | INT
 """
 )

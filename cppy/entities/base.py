@@ -1,7 +1,11 @@
+from itertools import izip
+
+
 class Entity(object):
     """Base class for all entities.
     Namespace, local scope, type, template type, variable, function."""
     Null = None
+    Void = None
     is_var = False
     is_type = False
     is_const = False
@@ -66,8 +70,9 @@ class Scope(Entity):
         return hash(id(self))
 
     def __str__(self):
-        return ''.join((type(self).__name__, '(', repr(self.name), ', ',
-                        str(self.contents.values()), ')'))
+        contents = self.contents and ', ' + str(self.contents.values()) or ''
+        return ''.join((type(self).__name__, '(', repr(self.name),
+                        contents, ')'))
 
     __repr__ = __str__
 
@@ -90,48 +95,3 @@ class Const(Entity):
     @property
     def value(self):
         return self._v
-
-
-class Type(Scope):
-    is_type = True
-
-    def __init__(self, name, scope, data):
-        Scope.__init__(self, name, scope)
-        self.data = data
-
-
-class Function(Scope):
-    is_function = True
-
-
-class TemplateType(Type):
-    is_template = True
-
-
-class TemplateFreeType(Type):
-
-    def __init__(self, name, scope, kw, default):
-        Type.__init__(self, name, scope, kw)
-        self.default = default
-        self.kw = kw
-
-    class DeferredResolution(Entity):
-        pass
-
-    def resolve(self, sym, local):
-        return DeferredResolution(self, sym, local)
-
-
-class TemplateFreeConst(Const):
-
-    def __init__(self, name, scope, kw, default):
-        Const.__init__(self, name, scope)
-        self.kw = kw
-        self.default = default
-
-    class DeferredValue(Entity):
-        pass
-
-    @property
-    def value(self):
-        return DeferredValue(self)

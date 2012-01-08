@@ -1,7 +1,8 @@
 from main_grammar import register, validator
 import id_engine
 from entities import Type, Namespace, TemplateType, Entity, Scope
-from entities import TemplateFreeConst, TemplateFreeType
+from entities import TemplateFreeConst, TemplateFreeType, Function
+from entities import PointerTo, ReferenceTo, FunctionParam
 
 
 @validator
@@ -10,11 +11,6 @@ def typedef(ast):
     typ = ast[-3]
     ret = Type(sym, id_engine.current(), typ)
     return ret
-
-
-@validator
-def int_type(ast):
-    return Type('', None, tuple(x[1] for x in ast[1:]))
 
 
 @validator
@@ -153,6 +149,7 @@ def _ENTER_STRUC(ast):
     return ret
 
 
+@validator
 def _MARK_STRUC(ast):
     if ast[2][0] == 'symbol':
         sym = ast[2][1]
@@ -163,6 +160,56 @@ def _MARK_STRUC(ast):
         ret = Type(sym, id_engine.current(), None)
     id_engine.enter(ret)
     return ret
+
+
+@validator
+def func_signature(ast):
+    print ast
+    params = []
+    cv = None
+    for x in ast[1:]:
+        if x[0] == 'func_type':
+            ftype = x[0]
+        elif x[0] == 'func_id':
+            print "FUNC ID", x[1:]
+            fid = x[1][1]
+        elif x[0] == 'func_param':
+            params.append(x[1])
+        elif x[0] == 'opt_cv_qualifier':
+            cv = (a[0] for a in x[1:])
+    print "ftype", ftype
+    print "fid", fid
+    print "fparam", params
+    f = id_engine.resolve(fid, True)
+    if f is Entity.Null:
+        f = Function(fid, id_engine.current())
+    sig = f.create_signature(ftype, params, cv)
+    return tuple()
+
+
+@validator
+def func_param(ast):
+    print ast
+    ptyp = ast[1]
+    if len(ast) > 2:
+        pname = ast[2][1]
+    else:
+        pname = None
+    if len(ast) == 4:
+        pdef = ast[3]
+    else:
+        pdef = None
+    ret = FunctionParam(ptyp, pname, pdef)
+    print ret
+    return ('func_param', ret)
+
+
+@validator
+def func_type(ast):
+    if type(ast[1]) is tuple and ast[1][1] == 'void':
+        return ('func_type', Entity.Void)
+    else:
+        return ast
 
 register(
 toplevel="""
@@ -218,13 +265,27 @@ func_decl
     | func_signature opt_body
 
 func_compile_spec
+    = func_compile_spec_list
+
+-func_compile_spec_list
     = func_compile_spec func_compile_spec1
     | func_compile_spec1
 
 func_compile_spec1 = INLINE | STATIC | EXTERN
 
 func_signature
-    = any_type func_id OPEN_PAR func_param_list_opt CLOSE_PAR opt_throw_spec
+    = func_type func_id
+      OPEN_PAR func_param_list_opt CLOSE_PAR
+      opt_cv_qualifier opt_throw_spec
+
+func_type
+    = VOID
+    | any_type
+
+opt_cv_qualifier
+    =| CONST
+     | VOLATILE
+     | CONST VOLATILE
 
 opt_throw_spec
     =| THROW OPEN_PAR opt_type_list CLOSE_PAR
@@ -245,19 +306,22 @@ opt_type
 
 func_id
     = _ASSERT_FUNC
-    | ID
+    | symbol
 
-func_param_list_opt
+-func_param_list_opt
     =| func_param_list
 
-func_param_list
+-func_param_list
     = func_param_list COMMA func_param
     | func_param
 
 func_param
-    = any_type symbol
+    = any_type symbol opt_default
     | any_type
     | func_ptr_signature
+
+opt_default
+    =| expr
 
 opt_body
     = _FORWARD_DECL

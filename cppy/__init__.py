@@ -12,11 +12,21 @@ grammar = main_grammar.grammar()
 from jupyLR import Automaton, pp_ast
 from scanner import cpp_scanner
 from time import time
+import os
+import cPickle
 
 
-@property
-def test():
-    return "TOTO !"
+CPPYCACHEDIR = os.path.join(os.getenv('HOME'), '.cppycache')
+CPPYCACHE_GRAMMAR = os.path.join(CPPYCACHEDIR, 'grammar')
+CPPYCACHE_PARSER = os.path.join(CPPYCACHEDIR, 'parser.pkl')
+
+if not os.path.isdir(CPPYCACHEDIR):
+    os.makedirs(CPPYCACHEDIR)
+
+if os.path.exists(CPPYCACHE_GRAMMAR):
+    cppycached_grammar = open(CPPYCACHE_GRAMMAR).read()
+else:
+    cppycached_grammar = ''
 
 
 class CppParser(Automaton):
@@ -40,9 +50,17 @@ class CppParser(Automaton):
             return ast
 
 
-cpp = CppParser()
+cache_is_valid = ((cppycached_grammar == grammar)
+                  and os.path.isfile(CPPYCACHE_PARSER))
 
-print "Built parser in", cpp.build_time, 'seconds'
-print "Unused rules :", cpp.unused_rules
-cpp.resolve_SR_conflicts()
-print len(cpp.conflicts()), "conflicts."
+if cache_is_valid:
+    cpp = cPickle.load(open(CPPYCACHE_PARSER))
+    print "Reusing cached parser"
+else:
+    open(CPPYCACHE_GRAMMAR, 'w').write(grammar)
+    cpp = CppParser()
+    print "Built parser in", cpp.build_time, 'seconds'
+    print "Unused rules :", cpp.unused_rules
+    cpp.resolve_SR_conflicts()
+    print len(cpp.conflicts()), "conflicts."
+    cPickle.dump(cpp, open(CPPYCACHE_PARSER, 'w'), 2)
