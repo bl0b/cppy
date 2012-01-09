@@ -252,7 +252,7 @@ type_or_pointer_type
 
 -type_or_pointer_type
     = type_id
-    | int_type
+    | builtin_type
 
 container
     = NAMESPACE_NAME
@@ -353,5 +353,4 @@ path
     = path SCOPE symbol
     | symbol
 
-"""
-)
+""")

@@ -6,6 +6,7 @@ __all__ = [
     'UnsignedChar', 'UnsignedInt', 'UnsignedLongInt', 'UnsignedLongInt',
     'Float', 'Double', 'LongDouble',
     'Bool', 'Wchar_t',
+    'PointerTo', 'ReferenceTo', 'TypeAlias',
 ]
 
 from base import Entity, Const
@@ -47,6 +48,8 @@ class IntegralType(Type):
         self.name = name
 
     def match(self, other, sign_matters=False):
+        while type(other) in (TypeAlias, ReferenceTo):
+            other = other.ref_type
         if type(other) is PointerTo:
             best = CLOSE_MATCH
         else:
@@ -99,6 +102,21 @@ class PointerTo(IntegralType):
         if type(other) is IntegralType:
             return min(IntegralType.match(self, other), CLOSE_MATCH)
         return NO_MATCH
+
+
+class TypeAlias(Type):
+
+    def __init__(self, name, scope, ref_type):
+        Type.__init__(self, name, scope)
+        self.ref_type = ref_type
+
+    def match(self, other, sign_matters=False):
+        return self.ref_type.match(other)
+
+    def __str__(self):
+        return 'TypeAlias(%s, ref=%s)' % (self.name, str(self.ref_type))
+
+    __repr__ = __str__
 
 
 class TemplateType(Type):

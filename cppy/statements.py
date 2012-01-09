@@ -1,5 +1,40 @@
-from main_grammar import register
+from main_grammar import register, validator
+from entities import Scope
+import id_engine
 # There is a need to address manually the dangling else problem
+
+
+class Statement(object):
+    pass
+
+
+class CondStatement(Statement):
+    pass
+
+
+class LoopStatement(Statement):
+    pass
+
+
+class JumpStatement(Statement):
+    pass
+
+
+class ExprStatement(Statement):
+    pass
+
+
+@validator
+def _ENTER_LOCAL_SCOPE(ast):
+    ret = Scope(None, id_engine.current())
+    id_engine.enter(ret)
+    return ret
+
+
+def _LEAVE_LOCAL_SCOPE(ast):
+    id_engine.leave()
+    return tuple()
+
 
 register(statements="""
 _ENTER_LOCAL_SCOPE = OPEN_CURLY
@@ -20,6 +55,7 @@ statement
     | WHILE OPEN_PAR
       SEMICOLON expr_list CLOSE_PAR statement
     | compound_statement
+    | var_decl
 
 label
     = symbol COLON

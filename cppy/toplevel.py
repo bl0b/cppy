@@ -2,14 +2,14 @@ from main_grammar import register, validator
 import id_engine
 from entities import Type, Namespace, TemplateType, Entity, Scope
 from entities import TemplateFreeConst, TemplateFreeType, Function
-from entities import PointerTo, ReferenceTo, FunctionParam
+from entities import PointerTo, ReferenceTo, FunctionParam, TypeAlias
 
 
 @validator
 def typedef(ast):
     sym = ast[-2][1]
     typ = ast[-3]
-    ret = Type(sym, id_engine.current(), typ)
+    ret = TypeAlias(sym, id_engine.current(), typ)
     return ret
 
 
@@ -43,7 +43,7 @@ def template_type_decl_prefix(ast):
     ret = TemplateType(sym, id_engine.current(), {
         'kw': kw,
         'free_params': ast[1],
-        'bound_params': []
+        'bound_params': [],
     })
     id_engine.enter(ret)
     return ret
@@ -86,13 +86,13 @@ def specialization_decl(ast):
 @validator
 def _FORWARD_DECL(ast):
     id_engine.leave()
-    return ast
+    return tuple()
 
 
 @validator
 def _LEAVE_SCOPE(ast):
     id_engine.leave()
-    return ast
+    return tuple()
 
 
 @validator
@@ -169,10 +169,13 @@ def func_signature(ast):
     cv = None
     for x in ast[1:]:
         if x[0] == 'func_type':
-            ftype = x[0]
+            ftype = x[1]
         elif x[0] == 'func_id':
             print "FUNC ID", x[1:]
-            fid = x[1][1]
+            if type(x[1]) is Function:
+                fid = x[1].name
+            else:
+                fid = x[1][1]
         elif x[0] == 'func_param':
             params.append(x[1])
         elif x[0] == 'opt_cv_qualifier':
@@ -184,7 +187,8 @@ def func_signature(ast):
     if f is Entity.Null:
         f = Function(fid, id_engine.current())
     sig = f.create_signature(ftype, params, cv)
-    return tuple()
+    id_engine.enter(f.scopes[sig])
+    return ('func_signature', fid, sig)
 
 
 @validator
@@ -211,8 +215,16 @@ def func_type(ast):
     else:
         return ast
 
+
+@validator
+def _ASSERT_NEW_SYMBOL(ast):
+    if id_engine.resolve(ast[1][1]) is not Entity.Null:
+        return None
+    return ast[1]
+
 register(
 toplevel="""
+_ASSERT_NEW_SYMBOL      = symbol
 _NAMESPACE_ENTER        = symbol
 _FUNC_NAME              = symbol
 _LEAVE_SCOPE            = CLOSE_CURLY
@@ -306,7 +318,7 @@ opt_type
 
 func_id
     = _ASSERT_FUNC
-    | symbol
+    | _ASSERT_NEW_SYMBOL
 
 -func_param_list_opt
     =| func_param_list
@@ -323,7 +335,7 @@ func_param
 opt_default
     =| expr
 
-opt_body
+-opt_body
     = _FORWARD_DECL
     | compound_statement
 """,

@@ -2,7 +2,7 @@ __all__ = [
     'Entity', 'Scope', 'Function', 'FunctionParam', 'Type', 'IntegralType',
     'Namespace', 'Variable', 'Const',
     #'StructuredType',
-    'TemplateType', 'ReferenceTo', 'PointerTo',
+    'TemplateType', 'ReferenceTo', 'PointerTo', 'TypeAlias',
     'TemplateFreeConst', 'TemplateFreeType',
     'Int', 'LongInt', 'LongLongInt', 'UnsignedInt', 'UnsignedLongInt',
     'UnsignedLongLongInt', 'Char', 'UnsignedChar', 'Float', 'Double',
@@ -16,7 +16,7 @@ from func import FunctionParam, Function
 from types import Type, TemplateType, IntegralType
 from types import TemplateFreeType, TemplateFreeConst
 #from types import StructuredType
-from types import PointerTo, ReferenceTo
+from types import PointerTo, ReferenceTo, TypeAlias
 
 from types import Int, LongInt, LongLongInt, UnsignedInt, UnsignedLongInt
 from types import UnsignedLongLongInt, Char, UnsignedChar, Float, Double
