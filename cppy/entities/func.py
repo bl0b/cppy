@@ -51,7 +51,7 @@ class Function(Entity):
         if len(exacts) == 0:
             self.signatures.append((ret_type, params, cv))
             ret = len(self.signatures) - 1
-            scope = Scope(None, self)
+            scope = Scope(None, self.owner)
             self.scopes.append(scope)
             for p in params:
                 scope.add(p)

@@ -44,6 +44,8 @@ class CppParser(Automaton):
             ret = main_grammar.validators[ast[0]](ast)
             print ret
             print 'ROOT', id_engine.root()
+            print 'CURPATH', id_engine.current().full_path
+            print 'CURRENT', id_engine.current()
             return ret
         else:
             print "AST", ast

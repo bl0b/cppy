@@ -53,6 +53,7 @@ class Scope(Entity):
     tag = 'S'
 
     def __init__(self, name=None, owner=None):
+        print "* NEW SCOPE *", "name =", name, "owner =", owner
         Entity.__init__(self, name, owner)
         self.contents = {}
 
@@ -70,8 +71,10 @@ class Scope(Entity):
         return hash(id(self))
 
     def __str__(self):
-        contents = self.contents and ', ' + str(self.contents.values()) or ''
-        return ''.join((type(self).__name__, '(', repr(self.name),
+        owner = self.owner and ', owner=' + repr(self.owner.name) or ''
+        contents = self.contents and (', contents=' +
+                                      str(self.contents.values())) or ''
+        return ''.join((type(self).__name__, '(', repr(self.name), owner,
                         contents, ')'))
 
     __repr__ = __str__

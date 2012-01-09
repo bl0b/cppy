@@ -5,37 +5,41 @@ from main_grammar import register, validator
 from entities import *
 
 
-__root = Namespace('')
+__builtins = Namespace('#builtins#')
+
+__root = Namespace('', __builtins)
 __current = __root
 
 
 __cur_stack = []
 
 
-Type('__builtin_va_list', __root)
-Function('__builtin_va_start', __root)
-Function('__builtin_va_end', __root)
-Function('__builtin_vsnprintf', __root)
-Function('__builtin_memmove', __root)
-Function('__builtin_memset', __root)
-Function('__builtin_memcmp', __root)
-Function('__builtin_memchr', __root)
-Function('__builtin_memcpy', __root)
-Function('__builtin_strlen', __root)
-Function('__builtin_strcmp', __root)
-Function('__builtin_expect', __root)
-Function('__builtin_alloca', __root)
+Type('__builtin_va_list', __builtins)
+Function('__builtin_va_start', __builtins)
+Function('__builtin_va_end', __builtins)
+Function('__builtin_vsnprintf', __builtins)
+Function('__builtin_memmove', __builtins)
+Function('__builtin_memset', __builtins)
+Function('__builtin_memcmp', __builtins)
+Function('__builtin_memchr', __builtins)
+Function('__builtin_memcpy', __builtins)
+Function('__builtin_strlen', __builtins)
+Function('__builtin_strcmp', __builtins)
+Function('__builtin_expect', __builtins)
+Function('__builtin_alloca', __builtins)
 
 
 def enter(into_what):
     global __current
     __cur_stack.append(__current)
     __current = into_what
+    print "ENTER", __cur_stack, __current
 
 
 def leave():
     global __current
     __current = __cur_stack.pop()
+    print "LEAVE", __cur_stack
 
 
 def current():
