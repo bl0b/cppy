@@ -28,7 +28,7 @@ class ExprStatement(Statement):
 def _ENTER_LOCAL_SCOPE(ast):
     ret = Scope(None, id_engine.current())
     id_engine.enter(ret)
-    return ret
+    return tuple()
 
 
 def _LEAVE_LOCAL_SCOPE(ast):
@@ -56,6 +56,7 @@ statement
       SEMICOLON expr_list CLOSE_PAR statement
     | compound_statement
     | var_decl
+    | _ASSERT_FUNC call SEMICOLON
 
 label
     = symbol COLON

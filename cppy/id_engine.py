@@ -30,16 +30,16 @@ Function('__builtin_alloca', __builtins)
 
 
 def enter(into_what):
-    global __current
+    global __current, __cur_stack
     __cur_stack.append(__current)
     __current = into_what
     print "ENTER", __cur_stack, __current
 
 
 def leave():
-    global __current
+    global __current, __cur_stack
     __current = __cur_stack.pop()
-    print "LEAVE", __cur_stack
+    print "LEAVE", __cur_stack, __current
 
 
 def current():

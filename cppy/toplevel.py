@@ -14,7 +14,7 @@ def typedef(ast):
 
 
 @validator
-def _NAMESPACE_ENTER(ast):
+def NAMESPACE_ENTER(ast):
     sym = ast[1][1]
     n = id_engine.resolve(sym, True)
     print "enter namespace ?", n
@@ -90,7 +90,7 @@ def _FORWARD_DECL(ast):
 
 
 @validator
-def _LEAVE_SCOPE(ast):
+def LEAVE_SCOPE(ast):
     id_engine.leave()
     return tuple()
 
@@ -222,17 +222,23 @@ def _ASSERT_NEW_SYMBOL(ast):
         return None
     return ast[1]
 
+
+@validator
+def _discard_curly(ast):
+    return tuple()
+
+
 register(
 toplevel="""
 _ASSERT_NEW_SYMBOL      = symbol
-_NAMESPACE_ENTER        = symbol
+NAMESPACE_ENTER        = symbol
 _FUNC_NAME              = symbol
-_LEAVE_SCOPE            = CLOSE_CURLY
+LEAVE_SCOPE            = CLOSE_CURLY
 _ENTER_STRUC            = s_c_u symbol OPEN_CURLY
                         | s_c_u OPEN_CURLY
 _MARK_STRUC             = s_c_u symbol
                         | s_c_u
-_STRUC_LEAVE            =
+_STRUCLEAVE            =
 -s_c_u                  = CLASS | STRUCT | UNION
 
 
@@ -257,10 +263,10 @@ using_decl
     | USING any_path SEMICOLON
 
 sub_translation_unit
-    = OPEN_CURLY translation_unit _LEAVE_SCOPE
+    = OPEN_CURLY translation_unit LEAVE_SCOPE
 
 namespace_decl
-    = NAMESPACE _NAMESPACE_ENTER gcc_attribute_opt sub_translation_unit
+    = NAMESPACE NAMESPACE_ENTER gcc_attribute_opt sub_translation_unit
 
 gcc_attribute_opt
     =| gcc_attribute
@@ -337,7 +343,10 @@ opt_default
 
 -opt_body
     = _FORWARD_DECL
-    | compound_statement
+    | _discard_curly opt_statement_list LEAVE_SCOPE
+
+_discard_curly
+    = OPEN_CURLY
 """,
 
 var_const_decl="""
@@ -397,7 +406,7 @@ typedef
     | TYPEDEF any_type symbol SEMICOLON
 
 struc_type_decl
-    = _ENTER_STRUC translation_unit _LEAVE_SCOPE
+    = _ENTER_STRUC translation_unit LEAVE_SCOPE
     | _MARK_STRUC
 
 template_type_decl_prefix
@@ -423,7 +432,7 @@ specialization_decl
 
 template_type_decl
     = template_type_decl_base _FORWARD_DECL
-    | template_type_decl_base OPEN_CURLY translation_unit _LEAVE_SCOPE
+    | template_type_decl_base OPEN_CURLY translation_unit LEAVE_SCOPE
 
 -opt_template_param_decl_list
     =| template_param_decl_list
@@ -470,7 +479,7 @@ template_param_inst
     | any_type
 
 -opt_struc_body
-    =| OPEN_CURLY translation_unit _LEAVE_SCOPE
+    =| OPEN_CURLY translation_unit LEAVE_SCOPE
 """,
 
 gcc_attributes="""

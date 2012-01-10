@@ -121,6 +121,7 @@ expr_p16
     | expr_p15 ASS_OR  _MARK_UPD expr_p16
     | expr_p15 ASS_XOR _MARK_UPD expr_p16
 
+-expr_p17 = expr_p16
 expr_p17 = THROW expr_p16
 
 -expr_p18 = expr_p17
