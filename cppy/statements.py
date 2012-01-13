@@ -52,10 +52,12 @@ statement
     | IF condition statement ELSE statement
     | SWITCH OPEN_PAR expr CLOSE_PAR compound_statement SEMICOLON
     | label
+    | RETURN expr SEMICOLON
     | WHILE OPEN_PAR
       SEMICOLON expr_list CLOSE_PAR statement
     | compound_statement
     | var_decl
+    | static_var_decl
     | _ASSERT_FUNC call SEMICOLON
 
 label

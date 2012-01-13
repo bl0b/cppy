@@ -1,5 +1,54 @@
-from main_grammar import register
+from main_grammar import register, validator
 # see http://en.cppreference.com/w/cpp/language/operator_precedence
+
+from entities import Int, UnsignedInt, LongInt, UnsignedLongInt, LongLongInt
+
+from entities import UnsignedLongLongInt, Const
+
+
+@validator
+def int_const(ast):
+    enc, val, ofs = ast[1]
+    val = val.upper()
+    if val.endswith('U'):
+        cls = UnsignedInt
+        sfx = -1
+    elif val.endswith('UL'):
+        cls = UnsignedLongInt
+        sfx = -2
+    elif val.endswith('ULL'):
+        cls = UnsignedLongLongInt
+        sfx = -3
+    elif val.endswith('LL'):
+        cls = LongLongInt
+        sfx = -2
+    elif val.endswith('L'):
+        cls = LongInt
+        sfx = -1
+    else:
+        cls = Int
+        sfx = len(val)
+    if enc == 'int_hex':
+        base = 16
+    elif enc == 'int_oct':
+        base = 8
+    elif enc == 'int_dec':
+        base = 10
+    return Const(None, None, cls, int(val[:sfx], base))
+
+
+@validator
+def expr_list(ast):
+    if len(ast) == 2:
+        return (ast[1],)
+    return ast[1] + (ast[3],)
+
+
+@validator
+def call(ast):
+    if len(ast) == 4:
+        return ('call', ast[2])
+    return ('call', tuple())
 
 register(expr_grammar="""
 _MARK_UPD=
@@ -12,10 +61,14 @@ typeid = TYPEID OPEN_PAR type_id CLOSE_PAR
 cpp_cast = cast_op INF type_id SUP
 cast_op = CONST_CAST | DYNAMIC_CAST | STATIC_CAST | REINTERPRET_CAST
 
+int_const = int_dec | int_oct | int_hex
+float_const = number
+
 -expr_0
     = var_id
     | const_id
-    | number
+    | int_const
+    | float_const
     | string
     | char
     | OPEN_PAR expr_any CLOSE_PAR
@@ -110,16 +163,7 @@ expr_p15 = expr_p14 QUESTION expr_p15 COLON expr_p17
 -expr_p16 = expr_p15
 expr_p16
     = expr_p15 EQUAL _MARK_SET expr_p16
-    | expr_p15 ASS_ADD _MARK_UPD expr_p16
-    | expr_p15 ASS_SUB _MARK_UPD expr_p16
-    | expr_p15 ASS_MUL _MARK_UPD expr_p16
-    | expr_p15 ASS_DIV _MARK_UPD expr_p16
-    | expr_p15 ASS_MOD _MARK_UPD expr_p16
-    | expr_p15 ASS_SHR _MARK_UPD expr_p16
-    | expr_p15 ASS_SHL _MARK_UPD expr_p16
-    | expr_p15 ASS_AND _MARK_UPD expr_p16
-    | expr_p15 ASS_OR  _MARK_UPD expr_p16
-    | expr_p15 ASS_XOR _MARK_UPD expr_p16
+    | expr_p15 ASS_OP _MARK_UPD expr_p16
 
 -expr_p17 = expr_p16
 expr_p17 = THROW expr_p16
@@ -136,7 +180,7 @@ expr_p18 = expr_p18 COMMA expr_p17
     = expr_list
     |
 
--expr_list
+expr_list
     = expr_list COMMA expr_no_comma
     | expr_no_comma
 """)

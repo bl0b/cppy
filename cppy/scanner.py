@@ -2,12 +2,15 @@ __all__ = ['cpp_scanner']
 from jupyLR import Scanner
 from itertools import imap
 
+int_suffix = "(?:L|LL|U|UL|ULL)?"
+int_dec = "(?:0|[1-9][0-9]*)" + int_suffix
+int_oct = "0[0-7]+" + int_suffix
+int_hex = "0x[a-fA-F0-9]+" + int_suffix
+
 
 num = r"(?:\.[0-9]+|(?:[0-9]+)(?:\.[0-9]*)?)"
 expo = r"(?:[eE]-?[0-9]+\.?[0-9]*)?[uUlLdf]*"
 number = num + expo
-
-hexnum = "0x[0-9a-fA-F]+[lLuU]*"
 
 keywords = [
     'switch', 'class', 'while', 'do', 'for', 'typedef', 'if', 'else', 'struct',
@@ -42,16 +45,15 @@ for k, v in kw_dic.iteritems():
     kw_dic[k] = r'\b(?:%s)\b' % v
 
 
+ASS_OP = '(?:[+]=|[-]=|[*]=|[/]=|[<][<]=|[>][>]=|[%]=)'
+
 misc = dict(PLUS='+', MINUS='-', STAR='*', SLASH='/',
             INF='<', SUP='>',
             AMPERSAND='&', PIPE='|', TILDE='~', CIRCONFLEX='^',
             EXCLAMATION='!',
             SHL='<<', SHR='>>',
-            ASS_ADD='+=', ASS_SUB='-=', ASS_MUL='*=', ASS_DIV='/=',
-            ASS_MOD='%=',
             LE='<=', GE='>=', EQ='==', NE='!=',
             LOG_AND="&&", LOG_OR="||",
-            ASS_SHL='<<=', ASS_SHR='>>=',
             COMMA=',',
             EQUAL='=',
             COLON=':',
@@ -102,11 +104,14 @@ for k, op in three_char.iteritems():
 
 discard_them_all = ['RESTRICT', 'CONST']
 
-cpp_scanner = Scanner(**kw_dic).add(**three_char) \
-                .add(**two_char).add(**one_char) \
-                .add(symbol=r'\b[a-zA-Z_][a-zA-Z0-9_]*\b') \
-                .add(hex=hexnum).add(number=number) \
-                .add(string=r'"(?:\\["bntr]|[^\\"])*"') \
-                .add(char=r"'(?:\\['bntr\\]|[^\\'])'") \
-                .add(ws='[ \t\n]+', discard_names=('ws',)) \
-                .add(discard_names=discard_them_all)
+cpp_scanner = (Scanner(**kw_dic).add(ASS_OP=ASS_OP)
+                .add(**three_char).add(**two_char).add(**one_char)
+                .add(symbol=r'\b[a-zA-Z_][a-zA-Z0-9_]*\b')
+                .add(int_hex=int_hex)
+                .add(int_oct=int_oct)
+                .add(int_dec=int_dec)
+                .add(number=number)
+                .add(string=r'L?"(?:\\["bntr]|[^\\"])*"')
+                .add(char=r"L?'(?:\\['bntr\\]|[^\\'])'")
+                .add(ws='[ \t\n]+', discard_names=('ws',))
+                .add(discard_names=discard_them_all))

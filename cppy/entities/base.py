@@ -13,12 +13,6 @@ class Entity(object):
     is_namespace = False
     is_function = False
 
-    def __init__(self, name, scope):
-        self.name = name
-        self.owner = scope
-        if name and self.owner:
-            self.owner.add(self)
-
     def match_specialization(self, params):
         return Entity.Null
 
@@ -27,11 +21,6 @@ class Entity(object):
 
     def add(self, what):
         pass
-
-    def __str__(self):
-        return type(self).__name__ + '(' + str(self.name) + ')'
-
-    __repr__ = __str__
 
     @property
     def full_path(self):
@@ -45,16 +34,50 @@ class Entity(object):
             return ''
 
 
-Entity.Null = Entity(None, None)
+Entity.Null = Entity()
 
 
-class Scope(Entity):
+class Has_Name(object):
+
+    def __init__(self, name, scope):
+        self.name = name
+        self.owner = scope
+        if name and self.owner:
+            self.owner.add(self)
+
+    def __str__(self):
+        return type(self).__name__ + '(' + str(self.name) + ')'
+
+    __repr__ = __str__
+
+
+class Has_Value(object):
+
+    def __init__(self, value):
+        self._v = value
+
+    @property
+    def value(self):
+        return self._v
+
+
+class Has_Type(object):
+
+    def __init__(self, type):
+        self._t = type
+
+    @property
+    def type(self):
+        return self._t
+
+
+class Scope(Has_Name, Entity):
     """A C++ scope, namespace or local scope."""
     tag = 'S'
 
     def __init__(self, name=None, owner=None):
         print "* NEW SCOPE *", "name =", name, "owner =", owner
-        Entity.__init__(self, name, owner)
+        Has_Name.__init__(self, name, owner)
         self.contents = {}
 
     def resolve(self, sym, local):
@@ -84,17 +107,25 @@ class Namespace(Scope):
     is_namespace = True
 
 
-class Variable(Entity):
+class Variable(Has_Name, Has_Type, Entity):
     is_var = True
 
+    def __init__(self, name, scope, type, static=False, default=None):
+        Has_Name.__init__(self, name, scope)
+        Has_Type.__init__(self, type)
+        self.is_static = static
+        self.default = default
 
-class Const(Entity):
+
+class Const(Has_Name, Has_Type, Has_Value, Entity):
     is_const = True
 
-    def __init__(self, name, scope, value):
-        Entity.__init__(self, name, scope)
-        self._v = value
+    def __init__(self, name, scope, typ, value):
+        Has_Name.__init__(self, name, scope)
+        Has_Value.__init__(self, value)
+        Has_Type.__init__(self, typ)
 
-    @property
-    def value(self):
-        return self._v
+    def __str__(self):
+        return 'Const(' + str(self.type) + ', ' + str(self.value) + ')'
+
+    __repr__ = __str__

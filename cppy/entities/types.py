@@ -9,18 +9,18 @@ __all__ = [
     'PointerTo', 'ReferenceTo', 'TypeAlias',
 ]
 
-from base import Entity, Const
+from base import Entity, Const, Has_Name
 
 EXACT_MATCH = 2
 CLOSE_MATCH = 1
 NO_MATCH = 0
 
 
-class Type(Entity):
+class Type(Has_Name, Entity):
     is_type = True
 
     def __init__(self, name, scope):
-        Entity.__init__(self, name, scope)
+        Has_Name.__init__(self, name, scope)
 
     def match(self, other):
         return NO_MATCH
@@ -69,7 +69,7 @@ class IntegralType(Type):
 class ReferenceTo(Type):
 
     def __init__(self, ref_type):
-        Entity.__init__(self, None, None)
+        Type.__init__(self, None, None)
         self.ref_type = ref_type
 
     def __str__(self):

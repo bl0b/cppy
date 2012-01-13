@@ -3,6 +3,7 @@ import id_engine
 from entities import Type, Namespace, TemplateType, Entity, Scope
 from entities import TemplateFreeConst, TemplateFreeType, Function
 from entities import PointerTo, ReferenceTo, FunctionParam, TypeAlias
+from entities import Variable
 
 
 @validator
@@ -228,6 +229,54 @@ def _discard_curly(ast):
     return tuple()
 
 
+__var_type = None
+
+
+@validator
+def var_type(ast):
+    global __var_type
+    __var_type = ast[1]
+    return tuple()
+
+
+@validator
+def single_var(ast):
+    global __var_type
+    if len(ast) == 3:
+        mod = ast[1]
+        if mod[0] == 'AMPERSAND':
+            typ = ReferenceTo(__var_type)
+        else:
+            # stars
+            typ = __var_type
+            for k in mod[1:]:
+                typ = PointerTo(__var_type)
+    else:
+        typ = __var_type
+    ret = Variable(ast[-1][1], id_engine.current(), typ)
+    return ret
+
+
+@validator
+def single_var_decl(ast):
+    var = ast[1]
+    if len(ast) == 2:
+        return var
+    var.default = ast[3]
+    return var
+
+
+@validator
+def var_decl(ast):
+    return ast[1:-1]
+
+
+@validator
+def static_var_decl(ast):
+    for v in ast[2]:
+        v.static = True
+    return ast
+
 register(
 toplevel="""
 _ASSERT_NEW_SYMBOL      = symbol
@@ -254,6 +303,7 @@ translation_unit
     | func_decl
     | const_decl
     | var_decl
+    | static_var_decl
     | type_decl
     | extern_linkage
     | using_decl
@@ -353,9 +403,15 @@ var_const_decl="""
 const_decl
     = CONST type_id symbol EQUAL expr SEMICOLON
 
+static_var_decl
+    = STATIC var_decl
+
 var_decl
-    = type_id var_decl_list SEMICOLON
+    = var_type var_decl_list SEMICOLON
     | func_ptr_signature SEMICOLON
+
+var_type
+    = type_id
 
 -var_decl_list
     = var_decl_list COMMA single_var_decl
@@ -365,7 +421,7 @@ single_var_decl
     = single_var
     | single_var EQUAL var_init
 
-single_var_base
+-single_var_base
     = modifier symbol
     | symbol
 

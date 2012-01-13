@@ -1,13 +1,13 @@
-from base import Scope, Entity
+from base import Scope, Entity, Has_Name
 from itertools import izip
 from types import EXACT_MATCH
 
 
-class Function(Entity):
+class Function(Has_Name, Entity):
     is_function = True
 
     def __init__(self, name, scope):
-        Entity.__init__(self, name, scope)
+        Has_Name.__init__(self, name, scope)
         self.signatures = []
         self.scopes = []
 
@@ -58,11 +58,11 @@ class Function(Entity):
             return ret
 
 
-class FunctionParam(Entity):
+class FunctionParam(Has_Name, Entity):
     is_var = True
 
     def __init__(self, typ, name=None, default=None):
-        Entity.__init__(self, None, None)
+        Has_Name.__init__(self, None, None)
         self.type = typ
         self.name = name
         self.default = None
