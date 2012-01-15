@@ -47,7 +47,9 @@ statement
     = SEMICOLON
     | BREAK SEMICOLON
     | CONTINUE SEMICOLON
-    | FOR OPEN_PAR expr_list SEMICOLON expr_list
+    | FOR OPEN_PAR expr_list
+         SEMICOLON expr_list
+         SEMICOLON expr_list CLOSE_PAR statement
     | IF condition statement
     | IF condition statement ELSE statement
     | SWITCH OPEN_PAR expr CLOSE_PAR compound_statement SEMICOLON
@@ -58,7 +60,7 @@ statement
     | compound_statement
     | var_decl
     | static_var_decl
-    | _ASSERT_FUNC call SEMICOLON
+    | expr SEMICOLON
 
 label
     = symbol COLON

@@ -2,11 +2,12 @@ __all__ = [
     'Type', 'IntegralType',
     'TemplateType', 'TemplateFreeConst', 'TemplateFreeType',
     'StructuredType',
-    'Char', 'Int', 'LongInt', 'LongLongInt',
-    'UnsignedChar', 'UnsignedInt', 'UnsignedLongInt', 'UnsignedLongInt',
+    'Char', 'Int', 'LongInt', 'LongLongInt', 'ShortInt', 'UnsignedShortInt',
+    'UnsignedChar', 'UnsignedInt', 'UnsignedLongInt', 'UnsignedLongLongInt',
     'Float', 'Double', 'LongDouble',
     'Bool', 'Wchar_t',
     'PointerTo', 'ReferenceTo', 'TypeAlias',
+    'Array',
 ]
 
 from base import Entity, Const, Has_Name
@@ -54,7 +55,8 @@ class IntegralType(Type):
             best = CLOSE_MATCH
         else:
             best = EXACT_MATCH
-        mask = sign_matters and 0xFFF or MASK
+        #mask = sign_matters and 0xFFF or MASK
+        mask = MASK
         a, b = self.magic & mask, other.magic & mask
         if a == b:
             return min(best, EXACT_MATCH)
@@ -104,6 +106,13 @@ class PointerTo(IntegralType):
         return NO_MATCH
 
 
+class Array(PointerTo):
+
+    def __init__(self, ref_type, size):
+        PointerTo.__init__(self, ref_type)
+        self.size = size
+
+
 class TypeAlias(Type):
 
     def __init__(self, name, scope, ref_type):
@@ -122,11 +131,17 @@ class TypeAlias(Type):
 class TemplateType(Type):
     is_template = True
 
+    def __init__(self, name, scope, kw, free_params, bound_params):
+        Type.__init__(self, name, scope)
+        self.kw = kw
+        self.free_params = free_params
+        self.bound_params = bound_params
+
 
 class TemplateFreeType(Type):
 
     def __init__(self, name, scope, kw, default):
-        Type.__init__(self, name, scope, kw)
+        Type.__init__(self, name, scope)
         self.default = default
         self.kw = kw
 

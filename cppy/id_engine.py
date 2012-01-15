@@ -167,6 +167,11 @@ def builtin_UnsignedChar(ast):
 
 
 @validator
+def builtin_UnsignedInt(ast):
+    return UnsignedInt
+
+
+@validator
 def builtin_Char(ast):
     return Char
 
@@ -275,11 +280,12 @@ type_id
 
 -builtin_type
     = builtin_Int
+    | builtin_UnsignedInt
     | builtin_ShortInt
     | builtin_UnsignedShortInt
     | builtin_LongInt
-    | builtin_LongLongInt
     | builtin_UnsignedLongInt
+    | builtin_LongLongInt
     | builtin_UnsignedLongLongInt
     | builtin_Float
     | builtin_Double
@@ -293,6 +299,10 @@ builtin_Int
     = INT
     | SIGNED
     | SIGNED INT
+
+builtin_UnsignedInt
+    = UNSIGNED
+    | UNSIGNED INT
 
 builtin_ShortInt
     = SHORT
@@ -311,20 +321,32 @@ builtin_LongInt
     | LONG INT
     | SIGNED LONG
     | SIGNED LONG INT
+    | LONG SIGNED INT
+    | LONG SIGNED
 
 builtin_LongLongInt
     = LONG LONG
     | LONG LONG INT
     | SIGNED LONG LONG
     | SIGNED LONG LONG INT
+    | LONG SIGNED LONG
+    | LONG SIGNED LONG INT
+    | LONG LONG SIGNED
+    | LONG LONG SIGNED INT
 
 builtin_UnsignedLongInt
     = UNSIGNED LONG
     | UNSIGNED LONG INT
+    | LONG UNSIGNED
+    | LONG UNSIGNED INT
 
 builtin_UnsignedLongLongInt
     = UNSIGNED LONG LONG
     | UNSIGNED LONG LONG INT
+    | LONG UNSIGNED LONG
+    | LONG UNSIGNED LONG INT
+    | LONG LONG UNSIGNED
+    | LONG LONG UNSIGNED INT
 
 builtin_Float
     = FLOAT
@@ -349,9 +371,7 @@ builtin_Bool
     = BOOL
 
 any_path
-    = _SEARCH_FROM_ROOT path
-    | _SEARCH_FROM_HERE SCOPE path
-    | _SEARCH_FROM_HERE
+    = expr_p1
 
 path
     = path SCOPE symbol

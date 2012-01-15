@@ -1,6 +1,9 @@
-int& some_func();
+namespace x {
+int& foobar();
+}
 int& some_func() {
     static int toto;
+    x::foobar() = toto;
     return toto;
 }
 

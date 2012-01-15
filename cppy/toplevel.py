@@ -3,7 +3,7 @@ import id_engine
 from entities import Type, Namespace, TemplateType, Entity, Scope
 from entities import TemplateFreeConst, TemplateFreeType, Function
 from entities import PointerTo, ReferenceTo, FunctionParam, TypeAlias
-from entities import Variable
+from entities import Variable, Array
 
 
 @validator
@@ -41,11 +41,7 @@ def template_type_decl_prefix(ast):
     decl = ast[-1]
     sym = decl[-1][1]
     kw = decl[-2][1]
-    ret = TemplateType(sym, id_engine.current(), {
-        'kw': kw,
-        'free_params': ast[1],
-        'bound_params': [],
-    })
+    ret = TemplateType(sym, id_engine.current(), kw, ast[1], [])
     id_engine.enter(ret)
     return ret
 
@@ -145,7 +141,7 @@ def _ENTER_STRUC(ast):
         sym = make_anon()
         ret = Entity.Null
     if ret is Entity.Null:
-        ret = Type(sym, id_engine.current(), None)
+        ret = Type(sym, id_engine.current())
     id_engine.enter(ret)
     return ret
 
@@ -158,8 +154,8 @@ def _MARK_STRUC(ast):
         sym = make_anon()
     ret = id_engine.resolve(sym)
     if ret is Entity.Null:
-        ret = Type(sym, id_engine.current(), None)
-    id_engine.enter(ret)
+        ret = Type(sym, id_engine.current())
+    #id_engine.enter(ret)
     return ret
 
 
@@ -242,18 +238,28 @@ def var_type(ast):
 @validator
 def single_var(ast):
     global __var_type
-    if len(ast) == 3:
+    if type(ast[1]) is tuple:
+        vari = 2
         mod = ast[1]
         if mod[0] == 'AMPERSAND':
             typ = ReferenceTo(__var_type)
-        else:
+        elif mod[0] == 'stars':
             # stars
             typ = __var_type
             for k in mod[1:]:
-                typ = PointerTo(__var_type)
+                typ = PointerTo(typ)
+        else:
+            vari = 1
+            typ = __var_type
     else:
+        vari = 1
         typ = __var_type
-    ret = Variable(ast[-1][1], id_engine.current(), typ)
+    print ast, vari
+    var = ast[vari]
+    for k in ast[-1:vari:-1]:
+        if k[0] == 'subscript':
+            typ = Array(typ, k[2])
+    ret = Variable(var, id_engine.current(), typ)
     return ret
 
 
@@ -318,7 +324,7 @@ sub_translation_unit
 namespace_decl
     = NAMESPACE NAMESPACE_ENTER gcc_attribute_opt sub_translation_unit
 
-gcc_attribute_opt
+-gcc_attribute_opt
     =| gcc_attribute
 
 extern_linkage
@@ -344,7 +350,7 @@ func_compile_spec1 = INLINE | STATIC | EXTERN
 func_signature
     = func_type func_id
       OPEN_PAR func_param_list_opt CLOSE_PAR
-      opt_cv_qualifier opt_throw_spec
+      opt_cv_qualifier opt_throw_spec gcc_attribute_opt
 
 func_type
     = VOID
@@ -405,6 +411,8 @@ const_decl
 
 static_var_decl
     = STATIC var_decl
+    | STATIC expr_p1 SEMICOLON
+    | STATIC expr_p1 var_init SEMICOLON
 
 var_decl
     = var_type var_decl_list SEMICOLON

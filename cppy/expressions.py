@@ -1,9 +1,11 @@
 from main_grammar import register, validator
 # see http://en.cppreference.com/w/cpp/language/operator_precedence
+import id_engine
 
 from entities import Int, UnsignedInt, LongInt, UnsignedLongInt, LongLongInt
 
 from entities import UnsignedLongLongInt, Const
+from operations import *
 
 
 @validator
@@ -50,13 +52,134 @@ def call(ast):
         return ('call', ast[2])
     return ('call', tuple())
 
-register(expr_grammar="""
-_MARK_UPD=
-_MARK_READ=
-_MARK_SET=
-_MARK_CAST=
-_COMMIT_CAST=
 
+@validator
+def typeid(ast):
+    return Entity.Null
+
+
+@validator
+def cpp_cast(ast):
+    return Entity.Null
+
+
+def binop(cls, ast):
+    return cls(ast[2][1], ast[1], ast[3])
+
+
+@validator
+def expr_p1(ast):
+    id = ast[-1]
+    spec = len(id) == 3 and id[-1] or None
+    if len(ast) == 2:
+        what = id_engine.resolve(id[1][1], False)
+    elif len(ast) == 3:
+        what = id_engine.root().resolve(id[1][1], False)
+    else:
+        what = ast[1].resolve(id[1][1], True)
+    if spec:
+        return what.match_specialization(spec)
+    else:
+        return what
+
+
+def unop(cls, ast):
+    return cls(ast[1][1], ast[2])
+
+
+@validator
+def expr_p2(ast):
+    if len(ast) == 2:
+        return ast[1]
+    if ast[-1][0] == 'INC':
+        return unop(Inc, ast)
+    elif ast[-1][0] == 'DEC':
+        return unop(PostDec, ast)
+    elif ast[-1][0] == 'subscript':
+        return Subscript(ast[1], ast[2][1])
+    elif ast[-1][0] == 'call':
+        return Call(ast[1], ast[2][1])
+    if ast[-2][0] == 'DOT':
+        return DotAccess(ast[1], ast[3])
+    elif ast[-2][0] == 'ARROW':
+        return ArrowAccess(ast[1], ast[3])
+
+
+@validator
+def expr_p3(ast):
+    k = ast[1][0]
+    if k == 'INC':
+        return unop(Inc, ast)
+    elif k == 'DEC':
+        return unop(Dec, ast)
+    elif k == 'PLUS':
+        return ast[2]
+    elif k == 'MINUS':
+        return unop(Minus, ast)
+    elif k == 'EXCLAMATION':
+        return unop(BitOp, ast)
+    elif k == 'OPEN_PAR':
+        return Cast(ast[2], ast[4])
+
+
+@validator
+def expr_p5(ast):
+    return binop(Arithmetic, ast)
+
+
+@validator
+def expr_p6(ast):
+    return binop(Arithmetic, ast)
+
+
+@validator
+def expr_p7(ast):
+    return binop(Arithmetic, ast)
+
+
+@validator
+def expr_p8(ast):
+    return binop(Comparison, ast)
+
+
+@validator
+def expr_p9(ast):
+    return binop(Comparison, ast)
+
+
+@validator
+def expr_p10(ast):
+    return binop(BitOp, ast)
+
+
+@validator
+def expr_p11(ast):
+    return binop(BitOp, ast)
+
+
+@validator
+def expr_p12(ast):
+    return binop(BitOp, ast)
+
+
+@validator
+def expr_p13(ast):
+    return binop(BitOp, ast)
+
+
+@validator
+def expr_p14(ast):
+    return binop(BitOp, ast)
+
+
+@validator
+def expr_p16(ast):
+    if ast[2][0] == 'ASS_OP':
+        return binop(AssignUpdate, ast)
+    return binop(AssignSet, ast)
+
+
+register(expr_grammar="""
 typeid = TYPEID OPEN_PAR type_id CLOSE_PAR
 cpp_cast = cast_op INF type_id SUP
 cast_op = CONST_CAST | DYNAMIC_CAST | STATIC_CAST | REINTERPRET_CAST
@@ -65,23 +188,30 @@ int_const = int_dec | int_oct | int_hex
 float_const = number
 
 -expr_0
-    = var_id
-    | const_id
-    | int_const
+    = int_const
     | float_const
     | string
     | char
+    | expr_p1
     | OPEN_PAR expr_any CLOSE_PAR
+
+expr_p1
+    = expr_p1 SCOPE id
+    | id
+    | SCOPE id
+
+id  = symbol opt_specialization
 
 -expr_p2 = expr_0
 expr_p2
-    = expr_p2 INC _MARK_UPD
-    | expr_p2 DEC _MARK_UPD
-    | expr_p2 subscript _MARK_READ
-    | expr_p2 DOT _MARK_READ field_id
-    | expr_p2 ARROW _MARK_READ field_id
+    = expr_p2 INC
+    | expr_p2 DEC
+    | expr_p2 subscript
+    | expr_p2 call
+    | expr_p2 DOT field_id
+    | expr_p2 ARROW field_id
     | typeid
-    | cpp_cast _MARK_CAST call _RESOLVE_CAST
+    | cpp_cast call
 
 subscript
     = OPEN_SQ expr CLOSE_SQ
@@ -99,10 +229,10 @@ expr_p3
     | MINUS expr_p3
     | EXCLAMATION expr_p3
     | TILDE expr_p3
-    | OPEN_PAR type_id CLOSE_PAR _MARK_CAST expr_p3 _COMMIT_CAST
+    | OPEN_PAR type_id CLOSE_PAR expr_p3
     | STAR expr_p3
     | AMPERSAND expr_p3
-    | SIZEOF OPEN_PAR type_id CLOSE_PAR
+    | SIZEOF OPEN_PAR any_type CLOSE_PAR
     | NEW expr_p3
     | DELETE expr_p3
     | DELETE OPEN_SQ CLOSE_SQ expr_p3
@@ -162,8 +292,8 @@ expr_p15 = expr_p14 QUESTION expr_p15 COLON expr_p17
 
 -expr_p16 = expr_p15
 expr_p16
-    = expr_p15 EQUAL _MARK_SET expr_p16
-    | expr_p15 ASS_OP _MARK_UPD expr_p16
+    = expr_p15 EQUAL expr_p16
+    | expr_p15 ASS_OP expr_p16
 
 -expr_p17 = expr_p16
 expr_p17 = THROW expr_p16

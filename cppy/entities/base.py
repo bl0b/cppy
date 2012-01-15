@@ -33,6 +33,13 @@ class Entity(object):
         else:
             return ''
 
+    def __str__(self):
+        if self is Entity.Null:
+            return '<Null>'
+        if self is Entity.Void:
+            return '<Void>'
+        return object.__str__(self)
+
 
 Entity.Null = Entity()
 

@@ -1,4 +1,4 @@
-from base import Scope, Entity, Has_Name
+from base import Scope, Entity, Has_Name, Has_Type
 from itertools import izip
 from types import EXACT_MATCH
 
@@ -26,7 +26,7 @@ class Function(Has_Name, Entity):
                              1)
         else:
             p_score = 0
-        ret_score = st.match(ret_type)
+        ret_score = ret_type and st.match(ret_type) or 1
         score = ret_score * cv_score * p_score
         return score, p_score == EXACT_MATCH ** len(params)
 
@@ -57,15 +57,27 @@ class Function(Has_Name, Entity):
                 scope.add(p)
             return ret
 
+    def match_signature(self, params, cv):
+        exacts, scores = self.score_signatures(None, params, cv)
+        if len(exacts) > 1:
+            raise Exception('Ambiguous signature '
+                            + str([self.signatures[i] for i in exacts]))
+        if len(exacts) == 1:
+            i = exacts[0]
+            print "Exact signature match", i, self.signatures[i]
+            return exacts[0]
+        print "Couldn't match any signature for", params, cv, "amongst",
+        print self.signatures
+        return None
 
-class FunctionParam(Has_Name, Entity):
+
+class FunctionParam(Has_Name, Has_Type, Entity):
     is_var = True
 
     def __init__(self, typ, name=None, default=None):
-        Has_Name.__init__(self, None, None)
-        self.type = typ
-        self.name = name
-        self.default = None
+        Has_Name.__init__(self, name, None)
+        Has_Type.__init__(self, typ)
+        self.default = default
 
     def __str__(self):
         ret = "FunctionParam(" + str(self.type)
