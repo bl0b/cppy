@@ -3,7 +3,8 @@ import id_engine
 from entities import Type, Namespace, TemplateType, Entity, Scope
 from entities import TemplateFreeConst, TemplateFreeType, Function
 from entities import PointerTo, ReferenceTo, FunctionParam, TypeAlias
-from entities import Variable, Array
+from entities import Variable, Array, StructuredType
+from itertools import imap
 
 
 @validator
@@ -58,7 +59,10 @@ def template_free_param_list(ast):
     else:
         cls = TemplateFreeConst
     kw = param[1][1]
-    sym = param[2][1]
+    if len(param) > 2:
+        sym = param[2][1]
+    else:
+        sym = None
     if len(param) == 4:
         default = param[3]
     else:
@@ -89,6 +93,7 @@ def _FORWARD_DECL(ast):
 @validator
 def LEAVE_SCOPE(ast):
     id_engine.leave()
+    print "LEAVE current =", id_engine.current()
     return tuple()
 
 
@@ -141,8 +146,10 @@ def _ENTER_STRUC(ast):
         sym = make_anon()
         ret = Entity.Null
     if ret is Entity.Null:
-        ret = Type(sym, id_engine.current())
+        ret = StructuredType(sym, id_engine.current())
+    print "_ENTER_STRUC current =", id_engine.current()
     id_engine.enter(ret)
+    print "_ENTER_STRUC in_struc =", id_engine.current()
     return ret
 
 
@@ -154,7 +161,8 @@ def _MARK_STRUC(ast):
         sym = make_anon()
     ret = id_engine.resolve(sym)
     if ret is Entity.Null:
-        ret = Type(sym, id_engine.current())
+        ret = StructuredType(sym, id_engine.current())
+    print "_MARK_STRUC current =", id_engine.current()
     #id_engine.enter(ret)
     return ret
 
@@ -283,19 +291,38 @@ def static_var_decl(ast):
         v.static = True
     return ast
 
+
+@validator
+def preproc(ast):
+    print "preproc"
+    return tuple()
+
+
+#
+
 register(
 toplevel="""
 _ASSERT_NEW_SYMBOL      = symbol
 NAMESPACE_ENTER        = symbol
 _FUNC_NAME              = symbol
 LEAVE_SCOPE            = CLOSE_CURLY
-_ENTER_STRUC            = s_c_u symbol OPEN_CURLY
+_ENTER_STRUC            = s_c_u symbol opt_bases OPEN_CURLY
                         | s_c_u OPEN_CURLY
 _MARK_STRUC             = s_c_u symbol
                         | s_c_u
-_STRUCLEAVE            =
 -s_c_u                  = CLASS | STRUCT | UNION
 
+opt_bases
+    =| COLON base_list
+
+-base_list
+    = base_list base
+    | base
+
+base
+    = PUBLIC expr_p1
+    | PROTECTED expr_p1
+    | PRIVATE expr_p1
 
 translation_unit
     =| tl_decl_list
@@ -307,12 +334,14 @@ translation_unit
 -tl_decl
     = namespace_decl
     | func_decl
+    | static_func_decl
     | const_decl
     | var_decl
     | static_var_decl
     | type_decl
     | extern_linkage
     | using_decl
+    | preproc
 
 using_decl
     = USING NAMESPACE any_path SEMICOLON
@@ -334,6 +363,9 @@ extern_linkage
 """,
 
 func_decl="""
+static_func_decl
+    = STATIC func_decl
+
 func_decl
     = func_compile_spec func_signature opt_body
     | func_signature opt_body
@@ -342,10 +374,10 @@ func_compile_spec
     = func_compile_spec_list
 
 -func_compile_spec_list
-    = func_compile_spec func_compile_spec1
+    = func_compile_spec_list func_compile_spec1
     | func_compile_spec1
 
-func_compile_spec1 = INLINE | STATIC | EXTERN
+func_compile_spec1 = INLINE | EXTERN
 
 func_signature
     = func_type func_id
@@ -486,6 +518,7 @@ enter_template_free_params
 
 leave_template_free_params
     = SUP s_c_u symbol
+    | SUP s_c_u
 
 specialization_decl
     = template_type_decl_prefix template_specialization
@@ -510,15 +543,18 @@ template_type_decl
     | template_free_const
 
 template_free_type
-    = TYPENAME symbol opt_tp_default
-    | CLASS symbol opt_tp_default
-    | STRUCT symbol opt_tp_default
-    | UNION symbol opt_tp_default
+    = TYPENAME opt_symbol opt_tp_default
+    | CLASS opt_symbol opt_tp_default
+    | STRUCT opt_symbol opt_tp_default
+    | UNION opt_symbol opt_tp_default
 
 template_free_const
-    = int_type symbol opt_tp_default
-    | CHAR symbol opt_tp_default
-    | BOOL symbol opt_tp_default
+    = int_type opt_symbol opt_tp_default
+    | CHAR opt_symbol opt_tp_default
+    | BOOL opt_symbol opt_tp_default
+
+-opt_symbol
+    =| symbol
 
 -opt_tp_default
     =| EQUAL template_param_inst
@@ -562,4 +598,11 @@ gcc_attribute
 gcc_attr_param
     = string
     | number
+
+preproc
+    = hash int_dec preproc_suf
+
+-preproc_suf
+    = preproc_suf int_dec
+    | string
 """)

@@ -10,7 +10,7 @@ __all__ = [
     'Array',
 ]
 
-from base import Entity, Const, Has_Name
+from base import Entity, Const, Has_Name, Scope
 
 EXACT_MATCH = 2
 CLOSE_MATCH = 1
@@ -22,6 +22,17 @@ class Type(Has_Name, Entity):
 
     def __init__(self, name, scope):
         Has_Name.__init__(self, name, scope)
+
+    def match(self, other):
+        return NO_MATCH
+
+
+class StructuredType(Scope):
+    is_type = True
+
+    def __init__(self, name, scope):
+        Scope.__init__(self, name, scope)
+        print "new StructuredType", name, scope
 
     def match(self, other):
         return NO_MATCH
@@ -155,7 +166,7 @@ class TemplateFreeType(Type):
 class TemplateFreeConst(Const):
 
     def __init__(self, name, scope, kw, default):
-        Const.__init__(self, name, scope)
+        Const.__init__(self, name, scope, None, None)
         self.kw = kw
         self.default = default
 

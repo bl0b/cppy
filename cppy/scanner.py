@@ -42,7 +42,10 @@ for kw in keywords:
     kw_dic[name] += value
 
 for k, v in kw_dic.iteritems():
-    kw_dic[k] = r'\b(?:%s)\b' % v
+    if '|' in v:
+        kw_dic[k] = r'\b(?:%s)\b' % v
+    else:
+        kw_dic[k] = r'\b' + v + r'\b'
 
 
 ASS_OP = '(?:[+]=|[-]=|[*]=|[/]=|[<][<]=|[>][>]=|[%]=)'
@@ -102,16 +105,20 @@ for k, op in three_char.iteritems():
 #tokens['number'] = number
 #tokens['symbol'] = symbol_assert + r'\b[a-zA-Z_][a-zA-Z0-9_]*\b'
 
-discard_them_all = ['RESTRICT', 'CONST']
+discard_them_all = ['RESTRICT', 'ws']
 
-cpp_scanner = (Scanner(**kw_dic).add(ASS_OP=ASS_OP)
-                .add(**three_char).add(**two_char).add(**one_char)
-                .add(symbol=r'\b[a-zA-Z_][a-zA-Z0-9_]*\b')
-                .add(int_hex=int_hex)
-                .add(int_oct=int_oct)
-                .add(int_dec=int_dec)
-                .add(number=number)
-                .add(string=r'L?"(?:\\["bntr]|[^\\"])*"')
-                .add(char=r"L?'(?:\\['bntr\\]|[^\\'])'")
-                .add(ws='[ \t\n]+', discard_names=('ws',))
-                .add(discard_names=discard_them_all))
+cpp_scanner = (Scanner(hash='[#]')
+               .add(**kw_dic)
+               .add(ASS_OP=ASS_OP)
+               .add(**three_char)
+               .add(**two_char)
+               .add(**one_char)
+               .add(symbol=r'\b[a-zA-Z_][a-zA-Z0-9_]*\b')
+               .add(int_hex=int_hex)
+               .add(int_oct=int_oct)
+               .add(int_dec=int_dec)
+               .add(number=number)
+               .add(string=r'L?"(?:\\["bntr]|[^\\"])*"')
+               .add(char=r"L?'(?:\\['bntr\\]|[^\\'])'")
+               .add(ws='[ \t\n]+')
+               .add(discard_names=discard_them_all))

@@ -17,6 +17,7 @@ class Entity(object):
         return Entity.Null
 
     def resolve(self, sym, local):
+        print type(self).__name__, "Entity.resolve", self, sym, local
         return Entity.Null
 
     def add(self, what):
@@ -39,6 +40,9 @@ class Entity(object):
         if self is Entity.Void:
             return '<Void>'
         return object.__str__(self)
+
+    def __eq__(self, x):
+        return id(self) == id(x)
 
 
 Entity.Null = Entity()
@@ -81,6 +85,7 @@ class Has_Type(object):
 class Scope(Has_Name, Entity):
     """A C++ scope, namespace or local scope."""
     tag = 'S'
+    root = None
 
     def __init__(self, name=None, owner=None):
         print "* NEW SCOPE *", "name =", name, "owner =", owner
@@ -88,6 +93,7 @@ class Scope(Has_Name, Entity):
         self.contents = {}
 
     def resolve(self, sym, local):
+        print type(self).__name__, "Scope.resolve", self, sym, local
         if sym in self.contents:
             return self.contents[sym]
         elif self.owner and not local:
@@ -108,6 +114,10 @@ class Scope(Has_Name, Entity):
                         contents, ')'))
 
     __repr__ = __str__
+
+    def __eq__(self, x):
+        print "Scope.__eq__", self, x
+        return self.name == x.name and self.owner == x.owner
 
 
 class Namespace(Scope):

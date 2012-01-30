@@ -8,6 +8,7 @@ from entities import *
 __builtins = Namespace('#builtins#')
 
 __root = Namespace('', __builtins)
+Scope.root = __root
 __current = __root
 
 

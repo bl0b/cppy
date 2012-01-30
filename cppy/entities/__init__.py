@@ -10,7 +10,7 @@ __all__ = [
     'Bool',
     'Wchar_t',
     'Has_Type', 'Has_Name', 'Has_Value',
-    'Array',
+    'Array', 'StructuredType',
 ]
 
 from base import Has_Type, Has_Value, Has_Name
@@ -25,5 +25,6 @@ from types import Int, LongInt, LongLongInt, UnsignedInt, UnsignedLongInt
 from types import UnsignedLongLongInt, Char, UnsignedChar, Float, Double
 from types import LongDouble, Bool, Wchar_t
 from types import Array, ShortInt, UnsignedShortInt
+from types import StructuredType
 
 Entity.Void = Type('void', None)

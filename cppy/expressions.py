@@ -71,6 +71,8 @@ def binop(cls, ast):
 def expr_p1(ast):
     id = ast[-1]
     spec = len(id) == 3 and id[-1] or None
+    print
+    print "EXPR_P1", len(ast), ast, id[1][1]
     if len(ast) == 2:
         what = id_engine.resolve(id[1][1], False)
     elif len(ast) == 3:
@@ -208,10 +210,16 @@ expr_p2
     | expr_p2 DEC
     | expr_p2 subscript
     | expr_p2 call
-    | expr_p2 DOT field_id
-    | expr_p2 ARROW field_id
+    | field_resolution
     | typeid
     | cpp_cast call
+
+field_resolution
+    = dot_arrow expr_p1
+
+dot_arrow
+    = expr_p2 DOT
+    | expr_p2 ARROW
 
 subscript
     = OPEN_SQ expr CLOSE_SQ
@@ -239,8 +247,8 @@ expr_p3
 
 -expr_p4 = expr_p3
 expr_p4
-    = expr_p4 DOT_STAR field_id
-    | expr_p4 ARROW_STAR field_id
+    = expr_p4 DOT_STAR id
+    | expr_p4 ARROW_STAR id
 
 -expr_p5 = expr_p4
 expr_p5
