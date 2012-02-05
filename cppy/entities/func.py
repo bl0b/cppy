@@ -1,6 +1,6 @@
 from base import Scope, Entity, Has_Name, Has_Type
 from itertools import izip
-from types import EXACT_MATCH
+from types import EXACT_MATCH, FuncType
 
 
 class Function(Has_Name, Entity):
@@ -35,11 +35,14 @@ class Function(Has_Name, Entity):
         scores = []
         for i, sig in enumerate(self.signatures):
             score, exact = self.__sig_score(sig, ret_type, params, cv)
+            print "signature", i, "scored", score
             if exact:
                 exacts.append(i)
             if score:
                 scores.append((i, score))
-        return exacts, [i for i, s in sorted(scores, key=lambda x: - x[1])]
+        ret = exacts, [i for i, s in sorted(scores, key=lambda x: - x[1])]
+        print "signature scores", ret
+        return ret
 
     def create_signature(self, ret_type, params, cv):
         exacts, scores = self.score_signatures(ret_type, params, cv)
@@ -49,7 +52,8 @@ class Function(Has_Name, Entity):
         if len(exacts) == 1:
             return exacts[0]
         if len(exacts) == 0:
-            self.signatures.append((ret_type, params, cv))
+            print "No exact match. close matches", scores
+            self.signatures.append((ret_type, [p.type for p in params], cv))
             ret = len(self.signatures) - 1
             scope = Scope(None, self.owner)
             self.scopes.append(scope)
@@ -57,7 +61,7 @@ class Function(Has_Name, Entity):
                 scope.add(p)
             return ret
 
-    def match_signature(self, params, cv):
+    def match_signature(self, params, cv, allow_close_match=False):
         exacts, scores = self.score_signatures(None, params, cv)
         if len(exacts) > 1:
             raise Exception('Ambiguous signature '
@@ -66,6 +70,8 @@ class Function(Has_Name, Entity):
             i = exacts[0]
             print "Exact signature match", i, self.signatures[i]
             return exacts[0]
+        if allow_close_match and len(scores):
+            print "Got close match", scores
         print "Couldn't match any signature for", params, cv, "amongst",
         print self.signatures
         return None

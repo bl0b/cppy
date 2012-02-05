@@ -68,6 +68,12 @@ def binop(cls, ast):
 
 
 @validator
+def expr_0(ast):
+    # always the sub-expression grouping.
+    return ast[2]
+
+
+@validator
 def expr_p1(ast):
     id = ast[-1]
     spec = len(id) == 3 and id[-1] or None
@@ -122,6 +128,13 @@ def expr_p3(ast):
         return unop(BitOp, ast)
     elif k == 'OPEN_PAR':
         return Cast(ast[2], ast[4])
+
+
+@validator
+def expr_p4(ast):
+    # TODO!
+    raise Exception("Unhandled arrow/dot -star operator")
+    return binop(Arithmetic, ast)
 
 
 @validator
@@ -195,7 +208,8 @@ float_const = number
     | string
     | char
     | expr_p1
-    | OPEN_PAR expr_any CLOSE_PAR
+expr_0
+    = OPEN_PAR expr_any CLOSE_PAR
 
 expr_p1
     = expr_p1 SCOPE id

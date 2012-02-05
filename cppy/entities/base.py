@@ -127,11 +127,12 @@ class Namespace(Scope):
 class Variable(Has_Name, Has_Type, Entity):
     is_var = True
 
-    def __init__(self, name, scope, type, static=False, default=None):
+    def __init__(self, name, scope, typ, static=False, default=None):
         Has_Name.__init__(self, name, scope)
-        Has_Type.__init__(self, type)
+        Has_Type.__init__(self, typ)
         self.is_static = static
         self.default = default
+        print self
 
 
 class Const(Has_Name, Has_Type, Has_Value, Entity):

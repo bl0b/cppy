@@ -263,7 +263,7 @@ def single_var(ast):
         vari = 1
         typ = __var_type
     print ast, vari
-    var = ast[vari]
+    var = ast[vari][1]
     for k in ast[-1:vari:-1]:
         if k[0] == 'subscript':
             typ = Array(typ, k[2])

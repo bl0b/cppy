@@ -22,6 +22,7 @@ class Type(Has_Name, Entity):
 
     def __init__(self, name, scope):
         Has_Name.__init__(self, name, scope)
+        self.type = self
 
     def match(self, other):
         return NO_MATCH
@@ -43,9 +44,9 @@ INT = 0x300
 FLOAT = 0x700
 SIGNED = 0x10
 UNSIGNED = 0x20
-SHORT = 0x2
-LONG = 0x4
-LONGLONG = 0x8
+SHORT = 0x3
+LONG = 0x7
+LONGLONG = 0xF
 
 MASK = 0xF0F
 

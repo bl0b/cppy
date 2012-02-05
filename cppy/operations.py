@@ -3,7 +3,9 @@ from entities import Has_Type, ReferenceTo
 
 
 def xtyp(a, b):
-    return a.type.match(b.type)
+    ret = a.type.match(b.type)
+    print "MATCHING", a.type, b.type, "=>", ret
+    return ret
 
 
 class Operation(Has_Type):
@@ -64,13 +66,19 @@ class Call(Operation):
 
     @staticmethod
     def __sig(func, params):
-        i = func.match_signature(params, ('CONST', 'VOLATILE'))
-        if not i:
-            i = func.match_signature(params, ('CONST',))
-        if not i:
-            i = func.match_signature(params, ('VOLATILE',))
-        if not i:
-            i = func.match_signature(params, None)
+        params = [p.type for p in params]
+        i = func.match_signature(params, ('CONST', 'VOLATILE'), True)
+        if i is None:
+            i = func.match_signature(params, ('CONST',), True)
+        if i is None:
+            i = func.match_signature(params, ('VOLATILE',), True)
+        if i is None:
+            i = func.match_signature(params, None, True)
+        if i is None:
+            print "Couldn't match signature amongst"
+            print '  ', '\n   '.join(imap(str, func.signatures))
+            print "for", params
+            return None
         return func.signatures[i]
 
     def __new__(cls, func, params):
@@ -109,7 +117,9 @@ class Cast(Has_Type):
         self.expr = expr
 
     def __str__(self):
-        return '(' + str(self.type) + ') ' + str(self.expr)
+        return 'Cast(to=' + str(self.type) + ', what=' + str(self.expr) + ')'
+
+    __repr__ = __str__
 
 
 class AssignSet(Operation):
